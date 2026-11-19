@@ -18,6 +18,8 @@ export interface ChainRuntime {
   explorer: string;
   /** Blocks to wait on the user's EVM lock before locking BCH. */
   confirmations: number;
+  /** Block the escrow was deployed in; event scans start here. */
+  deployBlock?: number;
 }
 
 export interface SolverConfig {
@@ -56,6 +58,7 @@ export function loadConfig(): SolverConfig {
       htlc: env(`${upper}_HTLC`) as Address,
       explorer: base.explorer,
       confirmations: num(`${upper}_CONFIRMATIONS`, 1),
+      deployBlock: num(`${upper}_DEPLOY_BLOCK`, 0),
     } satisfies ChainRuntime;
   });
   return {

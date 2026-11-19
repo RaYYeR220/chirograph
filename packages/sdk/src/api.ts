@@ -73,7 +73,7 @@ export interface SwapRecord {
   secretHash: string;
   secret?: string;
   user: { bchAddress?: string; evmAddress?: string };
-  bch: { lockAddress: string; refundTime: number; claimBytecode: string; refundBytecode: string; tokenAmount: number; lockTxid?: string; spendTxid?: string; refunded?: boolean; lockAttemptAt?: number };
+  bch: { lockAddress: string; refundTime: number; claimBytecode: string; refundBytecode: string; tokenAmount: number; lockTxid?: string; spendTxid?: string; refunded?: boolean; lockAttemptAt?: number; lockHex?: string };
   evm: { htlc: string; lockId: string; refundTime: number; amount: string; sender: string; recipient: string; lockTx?: string; spendTx?: string; refunded?: boolean; lockAttemptAt?: number };
   createdAt: number;
   updatedAt: number;

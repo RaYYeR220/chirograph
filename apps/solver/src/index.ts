@@ -9,6 +9,7 @@ import type { EvmChainKey } from '@chirograph/sdk';
 const cfg = loadConfig();
 const store = new SwapStore(cfg.dbPath);
 const bch = new BchSide(cfg);
+await bch.provider.connect();
 const evm = new Map<EvmChainKey, EvmSide>(cfg.chains.map((c) => [c.key, new EvmSide(c, cfg)]));
 const engine = new Engine(cfg, store, bch, evm);
 const app = await buildServer(engine);

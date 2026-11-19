@@ -22,9 +22,13 @@ export class BchSide {
   private walletLock = new Mutex();
 
   constructor(private cfg: SolverConfig) {
+    // One long-lived connection: opening a websocket per request adds seconds of latency and
+    // occasional stalls, which would eat into the instant tier.
     this.provider = new ElectrumNetworkProvider(
       cfg.bchNetwork,
-      cfg.electrumHost ? { hostname: cfg.electrumHost } : {},
+      cfg.electrumHost
+        ? { hostname: cfg.electrumHost, manualConnectionManagement: true }
+        : { manualConnectionManagement: true },
     );
     this.signer = new SignatureTemplate(cfg.bchWif);
     const pkh = this.signer.publicKey;
@@ -48,8 +52,12 @@ export class BchSide {
     return { tokens, sats, utxos: utxos.length };
   }
 
-  /** Lock `amount` tokens from the solver wallet into a lock with the given parameters. */
-  async lockTokens(params: BchLockParams, amount: bigint): Promise<{ txid: string; lockAddress: string }> {
+  /**
+   * Build and sign (but do not broadcast) a transaction locking `amount` tokens from the solver
+   * wallet. The caller persists the hex before broadcasting, so a retry re-sends the exact same
+   * transaction instead of building a second lock.
+   */
+  async buildTokenLock(params: BchLockParams, amount: bigint): Promise<{ hex: string; txid: string; lockAddress: string }> {
     return this.walletLock.run(async () => {
       const contract = this.contract(params);
       const utxos = await this.provider.getUtxos(this.address);
@@ -62,8 +70,7 @@ export class BchSide {
         changeAddress: this.tokenAddress,
       });
       const hex = builder.build();
-      const txid = await this.broadcast(hex);
-      return { txid, lockAddress: contract.tokenAddress };
+      return { hex, txid: txidOf(hex), lockAddress: contract.tokenAddress };
     });
   }
 

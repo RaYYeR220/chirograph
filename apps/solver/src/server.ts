@@ -69,5 +69,5 @@ export async function buildServer(engine: Engine) {
  */
 function publicView(s: SwapRecord): SwapRecord {
   const revealed = s.status === 'secret_revealed' || s.status === 'completed';
-  return revealed ? s : { ...s, secret: undefined };
+  return { ...s, secret: revealed ? s.secret : undefined, bch: { ...s.bch, lockHex: undefined } };
 }

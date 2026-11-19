@@ -33,6 +33,17 @@ export class EvmSide {
 
   get address(): Address { return this.account.address; }
 
+  /** First block to scan for escrow events (set HTLC_DEPLOY_BLOCK per chain to keep log queries cheap). */
+  get deployBlock(): bigint { return BigInt(this.chain.deployBlock ?? 0); }
+
+  /** True while a transaction is known to the node but not yet mined. */
+  async txPending(hash: Hex): Promise<boolean> {
+    const receipt = await this.pub.getTransactionReceipt({ hash }).catch(() => undefined);
+    if (receipt) return false;
+    const tx = await this.pub.getTransaction({ hash }).catch(() => undefined);
+    return tx !== undefined;
+  }
+
   async usdcBalance(): Promise<bigint> {
     return this.pub.readContract({ address: this.chain.usdc, abi: erc20Abi, functionName: 'balanceOf', args: [this.address] });
   }

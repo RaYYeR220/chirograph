@@ -3,7 +3,7 @@ import { binToHex, hexToBin } from '@bitauth/libauth';
 import type { Address, Hex } from 'viem';
 import {
   LOCK_SATS, TIMEOUTS, USDC_UNITS_PER_PUSD_UNIT, addressToBytecode, bytecodeToAddress, computeLockId, hashSecret,
-  quoteFee, LockState, parseLockMemo,
+  quoteFee, LockState, parseLockMemo, htlcAbi,
   type BchLockParams, type EvmChainKey, type OpenInSwap, type OpenOutSwap, type Quote, type QuoteRequest,
   type SolverInfo, type SwapRecord, type SwapStatus, type TimelineEvent,
 } from '@chirograph/sdk';
@@ -286,18 +286,39 @@ export class Engine {
         this.save(swap);
       }
       const params = this.bchParams(swap);
-      const history = await this.bch.lockHistory(params);
-      if (history.length === 0) {
-        if (swap.bch.lockAttemptAt && now() - swap.bch.lockAttemptAt < 60) return; // let the indexer catch up
+      const expect = this.bchExpect(swap);
+      // Only our own funding transaction counts. Dust or junk sent to the lock address by anyone
+      // else is ignored, because the lock must match the exact txid we built and persisted.
+      if (swap.bch.lockTxid && (await this.bch.sight(params, expect))) {
+        swap.status = 'solver_locked';
+        this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: swap.bch.lockTxid });
+        return this.save(swap);
+      }
+      if (swap.bch.lockHex) {
+        if (swap.bch.lockAttemptAt && now() - swap.bch.lockAttemptAt < 30) return; // let the indexer catch up
         swap.bch.lockAttemptAt = now();
         this.save(swap);
-        const { txid } = await this.bch.lockTokens(params, BigInt(swap.bch.tokenAmount));
-        swap.bch.lockTxid = txid;
-      } else {
-        swap.bch.lockTxid ??= history[0];
+        try {
+          await this.bch.broadcast(swap.bch.lockHex);
+        } catch (err) {
+          // Our inputs were spent elsewhere, so this exact lock can never confirm: build a fresh one.
+          if (/missing|spent|conflict/i.test(String((err as Error).message))) {
+            swap.bch.lockHex = undefined;
+            swap.bch.lockTxid = undefined;
+            this.save(swap);
+          }
+          throw err;
+        }
+        return;
       }
+      const built = await this.bch.buildTokenLock(params, BigInt(swap.bch.tokenAmount));
+      swap.bch.lockHex = built.hex;
+      swap.bch.lockTxid = built.txid;
+      swap.bch.lockAttemptAt = now();
+      this.save(swap);
+      await this.bch.broadcast(built.hex);
       swap.status = 'solver_locked';
-      this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: swap.bch.lockTxid });
+      this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: built.txid });
       return this.save(swap);
     }
 
@@ -385,6 +406,7 @@ export class Engine {
       }
       const existing = await side.readLock(swap.evm.lockId as Hex);
       if (existing.state === LockState.None) {
+        if (swap.evm.lockTx && (await side.txPending(swap.evm.lockTx as Hex))) return; // still in flight
         if (swap.evm.lockAttemptAt && now() - swap.evm.lockAttemptAt < 90) return; // a send may still be in flight
         if (now() >= swap.evm.refundTime - MIN_CLAIM_MARGIN / 3) {
           swap.status = 'refunding';
@@ -409,11 +431,7 @@ export class Engine {
       const lock = await side.readLock(swap.evm.lockId as Hex);
       if (lock.state === LockState.Claimed && !swap.secret) {
         // The user claimed on-chain themselves; read the secret from the event logs.
-        const logs = await side.pub.getContractEvents({
-          address: side.chain.htlc, abi: (await import('@chirograph/sdk')).htlcAbi, eventName: 'Claimed',
-          args: { id: swap.evm.lockId as Hex }, fromBlock: 'earliest',
-        });
-        const secret = (logs[0] as { args?: { secret?: Hex } } | undefined)?.args?.secret;
+        const secret = await this.claimedSecret(side, swap.evm.lockId as Hex);
         if (secret) {
           swap.secret = secret.slice(2);
           swap.status = 'secret_revealed';
@@ -441,6 +459,31 @@ export class Engine {
     }
 
     if (swap.status === 'refunding') {
+      // Before returning the user's PUSD, make sure our USDC lock (if one ever landed) is settled:
+      // if the user claimed it, we take the PUSD with the revealed secret instead.
+      if (swap.evm.lockId) {
+        if (swap.evm.lockTx && (await side.txPending(swap.evm.lockTx as Hex))) return;
+        const lock = await side.readLock(swap.evm.lockId as Hex);
+        if (lock.state === LockState.Claimed) {
+          const secret = await this.claimedSecret(side, swap.evm.lockId as Hex);
+          if (secret) {
+            swap.secret = secret.slice(2);
+            swap.status = 'secret_revealed';
+            this.log(swap, { event: 'You claimed your USDC on-chain', chain: swap.chain });
+            return this.save(swap);
+          }
+          return;
+        }
+        if (lock.state === LockState.Open) {
+          if (now() < swap.evm.refundTime) return;
+          const hash = await side.refund(swap.evm.lockId as Hex);
+          await side.waitFor(hash);
+          swap.evm.spendTx = hash;
+          swap.evm.refunded = true;
+          this.log(swap, { event: 'Timed out: solver USDC lock refunded', chain: swap.chain, txid: hash });
+          this.save(swap);
+        }
+      }
       // Return the user's PUSD as soon as BCH time allows. Anyone could do this; we do it for them.
       if ((await this.bch.medianTimePast()) > swap.bch.refundTime) {
         const txid = await this.bch.spend(bchParams, this.bchExpect(swap), 'refund');
@@ -454,6 +497,14 @@ export class Engine {
   }
 
   // ---------------------------------------------------------------- helpers
+
+  /** The secret from the Claimed event of an EVM lock, if it was claimed. */
+  private async claimedSecret(side: EvmSide, id: Hex): Promise<Hex | undefined> {
+    const logs = await side.pub.getContractEvents({
+      address: side.chain.htlc, abi: htlcAbi, eventName: 'Claimed', args: { id }, fromBlock: side.deployBlock,
+    });
+    return (logs[0] as { args?: { secret?: Hex } } | undefined)?.args?.secret;
+  }
 
   private bchParams(swap: SwapRecord): BchLockParams {
     return {
