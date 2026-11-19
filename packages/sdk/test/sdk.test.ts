@@ -130,3 +130,17 @@ describe('evm lock id', () => {
     expect(computeLockId({ ...base, chainId: 42161 })).not.toBe(id);
   });
 });
+
+describe('lock utxo selection', () => {
+  it('ignores dust and junk tokens sent to a lock address', async () => {
+    const { pickLockUtxo } = await import('../src/index.js');
+    const real = { txid: 'aa'.repeat(32), vout: 0, satoshis: 2_000n, token: { category: PUSD_CATEGORY, amount: 125n } };
+    const dust = { txid: 'bb'.repeat(32), vout: 0, satoshis: 546n };
+    const junk = { txid: 'cc'.repeat(32), vout: 1, satoshis: 5_000n, token: { category: 'dd'.repeat(32), amount: 999n } };
+    const short = { txid: 'ee'.repeat(32), vout: 0, satoshis: 2_000n, token: { category: PUSD_CATEGORY, amount: 1n } };
+    const expect1 = { category: PUSD_CATEGORY, amount: 125n, minSats: 1_500n };
+    expect(pickLockUtxo([dust, junk, short, real], expect1)).toBe(real);
+    expect(pickLockUtxo([dust, junk, short], expect1)).toBeUndefined();
+    expect(pickLockUtxo([real], { ...expect1, txid: 'ff'.repeat(32) })).toBeUndefined();
+  });
+});

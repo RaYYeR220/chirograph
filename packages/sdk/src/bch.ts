@@ -73,6 +73,7 @@ export function buildKeylessSpend(opts: {
   const fee = opts.fee ?? KEYLESS_SPEND_FEE;
   const maxFee = opts.params.maxFee ?? MAX_EXECUTOR_FEE;
   if (fee > maxFee) throw new Error('fee exceeds the covenant cap');
+  if (opts.utxo.satoshis <= fee + 546n) throw new Error('lock UTXO too small to pay the spend fee');
   const destination = opts.path === 'claim' ? opts.params.claimBytecode : opts.params.refundBytecode;
   const unlocker = opts.path === 'claim'
     ? opts.contract.unlock.claim(requireSecret(opts.secret))
@@ -232,10 +233,33 @@ function encodeTx(wc: WcTransactionObject): Uint8Array {
   return encodeTransactionBch(wc.transaction);
 }
 
-/** Find the lock UTXO (if any) currently sitting at a lock contract's address. */
-export async function findLockUtxo(contract: LockContract): Promise<SpendableUtxo | undefined> {
-  const utxos = await contract.getUtxos();
-  return utxos[0];
+export interface LockExpectation {
+  /** Token category the lock must carry (omit for plain-BCH locks). */
+  category?: string;
+  /** Minimum token amount (the quoted amount). */
+  amount?: bigint;
+  minSats?: bigint;
+  /** If known, the exact funding outpoint; anything else at the address is ignored. */
+  txid?: string;
+  vout?: number;
+}
+
+/**
+ * Pick the real lock UTXO among everything sitting at a lock address. Anyone can send dust or
+ * junk tokens to a lock address, so we never take "the first UTXO": only one that matches what the
+ * swap expects counts, and an exact funding outpoint wins when we know it.
+ */
+export function pickLockUtxo<U extends Utxo>(utxos: U[], expect: LockExpectation): U | undefined {
+  const matching = utxos.filter((u) => checkLockUtxo(u, expect) === undefined);
+  if (expect.txid) {
+    return matching.find((u) => u.txid === expect.txid && (expect.vout === undefined || u.vout === expect.vout));
+  }
+  return matching.sort((a, b) => Number((b.token?.amount ?? 0n) - (a.token?.amount ?? 0n)))[0];
+}
+
+/** Find the lock UTXO (if any) at a lock contract's address that matches the expectation. */
+export async function findLockUtxo(contract: LockContract, expect: LockExpectation): Promise<SpendableUtxo | undefined> {
+  return pickLockUtxo(await contract.getUtxos(), expect);
 }
 
 /** Basic sanity check a counterparty lock before trusting it: value, token and amount. */
