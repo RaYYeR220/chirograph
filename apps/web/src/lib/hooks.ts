@@ -4,7 +4,7 @@ import type { Address, Hex } from 'viem';
 import type { Direction, EvmChainKey, Quote, SolverInfo, SwapRecord } from '@chirograph/sdk';
 import { scanWallet, type WalletSnapshot } from './bchWallet';
 import { LockState } from '@chirograph/sdk';
-import { checkQuote, claimEvmDirect, claimSwapIn, evmLockState, revealSwapOut, solver, startSwapIn, startSwapOut, storedSwap, storedSwaps } from './swaps';
+import { checkQuote, claimEvmDirect, claimSwapIn, evmLockState, revealSwapOut, solver, startSwapIn, startSwapOut, storedSwap } from './swaps';
 
 export function useSolverInfo(pollMs = 15_000) {
   const [info, setInfo] = useState<SolverInfo | null>(null);
@@ -67,14 +67,18 @@ export function useSwapRunner(deps: {
   signTypedData: (typed: Parameters<Parameters<typeof startSwapIn>[0]['signTypedData']>[0]) => Promise<Hex>;
   /** Show the quote (amount out, fee) and let the user accept it before anything is signed. */
   confirmQuote?: (quote: Quote) => Promise<boolean>;
+  /** Pay PUSD to this address instead of the connected wallet (merchant checkout). */
+  bchTarget?: string;
   /** Send the user's own EVM claim if the relayer does not (they pay gas). */
   writeClaim?: Parameters<typeof claimEvmDirect>[2];
-}) {
-  const [id, setId] = useState<string | null>(() => storedSwaps()[0]?.id ?? null);
+}, initialId: string | null = null) {
+  const [id, setId] = useState<string | null>(initialId);
   const [stage, setStage] = useState<RunnerStage>('idle');
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /** When the user's funds actually arrived (claim confirmed by this browser), for the headline timer. */
+  const [fundsAt, setFundsAt] = useState<number | null>(null);
   const swap = useSwapRecord(id);
   const acting = useRef(false);
   /** Swaps whose claim/reveal already succeeded in this tab: never act twice. */
@@ -85,6 +89,7 @@ export function useSwapRunner(deps: {
     if (!info || !evmAddress) throw new Error('connect both wallets first');
     setError(null);
     setId(null);
+    setFundsAt(null);
     setStage('signing');
     setStarted(Date.now());
     try {
@@ -92,7 +97,7 @@ export function useSwapRunner(deps: {
       checkQuote(quote, { direction, chain, amount });
       if (deps.confirmQuote && !(await deps.confirmQuote(quote))) { setStage('idle'); return; }
       if (direction === 'in') {
-        const target = bch.wallet?.receive.tokenAddress;
+        const target = deps.bchTarget ?? bch.wallet?.receive.tokenAddress;
         if (!target) throw new Error('connect a Bitcoin Cash wallet to receive PUSD');
         const s = await startSwapIn({ info, quote, userEvm: evmAddress, bchTokenAddress: target, signTypedData: deps.signTypedData });
         setId(s.id);
@@ -125,7 +130,7 @@ export function useSwapRunner(deps: {
       ? claimSwapIn(swap, setNote)
       : revealSwapOut(swap, info).then(() => watchUntilPaid(swap.id));
     run
-      .then(() => { handled.current.add(swap.id); })
+      .then(() => { handled.current.add(swap.id); if (local.direction === 'in') setFundsAt(Date.now()); })
       .catch((e: Error) => { setStage('error'); setError(e.message); })
       .finally(() => { acting.current = false; });
   }, [swap, deps]);
@@ -143,7 +148,7 @@ export function useSwapRunner(deps: {
       const local = storedSwap(swapId);
       if (!local?.verifiedLockId) { setStage('claim_yourself'); return; }
       const state = await evmLockState(swapId, info).catch(() => null);
-      if (state === LockState.Claimed) return;
+      if (state === LockState.Claimed) { setFundsAt(Date.now()); return; }
       if (state === LockState.Open && !triedDirect && Date.now() - start > 30_000) {
         triedDirect = true;
         if (deps.writeClaim) {
@@ -155,10 +160,10 @@ export function useSwapRunner(deps: {
           return;
         }
       }
-      await new Promise((r) => setTimeout(r, 3_000));
+      await new Promise((r) => setTimeout(r, Date.now() - start < 60_000 ? 600 : 3_000));
     }
   }, [deps]);
 
-  const reset = useCallback(() => { setId(null); setStage('idle'); setError(null); setStarted(null); setNote(null); }, []);
-  return { id, swap, stage, error, note, start, reset, started };
+  const reset = useCallback(() => { setId(null); setStage('idle'); setError(null); setStarted(null); setNote(null); setFundsAt(null); }, []);
+  return { id, swap, stage, error, note, start, reset, started, fundsAt };
 }

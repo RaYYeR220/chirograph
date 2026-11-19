@@ -12,17 +12,21 @@
   "dependencies": {
     "@bitauth/libauth": "3.1.0-next.8",
     "@chirograph/sdk": "workspace:^",
+    "@fontsource/geist-mono": "5",
     "@tanstack/react-query": "5",
     "@wizardconnect/core": "0.2.11",
     "@wizardconnect/dapp": "0.2.8",
     "@wizardconnect/react": "0.2.7",
     "cashscript": "0.14.0",
+    "qrcode": "1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "viem": "2",
-    "wagmi": "2"
+    "wagmi": "2",
+    "wouter": "3"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/react": "18",
     "@types/react-dom": "18",
     "@vitejs/plugin-react": "4",
