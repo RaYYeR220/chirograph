@@ -21,7 +21,11 @@ const CLAIM_SAFETY_SECONDS = 15 * 60;
  * The secret lives only in this browser until the user reveals it. We keep it in localStorage so
  * a refresh mid-swap does not strand the user, and offer it as a recovery file.
  */
-export interface StoredSwap { id: string; secret: string; direction: 'in' | 'out'; chain: string; createdAt: number }
+export interface StoredSwap {
+  id: string; secret: string; direction: 'in' | 'out'; chain: string; createdAt: number;
+  /** Where THIS browser asked to be paid; checked against the solver's lock before revealing. */
+  bchTarget?: string; evmTarget?: string;
+}
 const KEY = 'chirograph:swaps';
 
 export function storedSwaps(): StoredSwap[] {
@@ -29,6 +33,9 @@ export function storedSwaps(): StoredSwap[] {
 }
 function storeSwap(s: StoredSwap) {
   try { localStorage.setItem(KEY, JSON.stringify([s, ...storedSwaps().filter((x) => x.id !== s.id)].slice(0, 50))); } catch { /* private mode */ }
+}
+export function storedSwap(id: string): StoredSwap | undefined {
+  return storedSwaps().find((x) => x.id === id);
 }
 export function secretFor(id: string): Uint8Array | undefined {
   const s = storedSwaps().find((x) => x.id === id);
@@ -52,7 +59,7 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
   const secret = generateSecret();
   const secretHash = to0x(hashSecret(secret));
   const id = secretHash.slice(2);
-  storeSwap({ id, secret: binToHex(secret), direction: 'in', chain: chain.key, createdAt: now() });
+  storeSwap({ id, secret: binToHex(secret), direction: 'in', chain: chain.key, createdAt: now(), bchTarget: a.bchTokenAddress, evmTarget: a.userEvm });
   const evmRefundTime = now() + TIMEOUTS.inEvmRefundSeconds;
   const validBefore = now() + 20 * 60;
   const domain = await usdcDomain(publicClient(chain.chainId), chain.usdc, chain.chainId);
@@ -116,7 +123,7 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
   const secret = generateSecret();
   const secretHash = hashSecret(secret);
   const id = binToHex(secretHash);
-  storeSwap({ id, secret: binToHex(secret), direction: 'out', chain: chain.key, createdAt: now() });
+  storeSwap({ id, secret: binToHex(secret), direction: 'out', chain: chain.key, createdAt: now(), bchTarget: a.wallet.receive.tokenAddress, evmTarget: a.userEvm });
   const bchRefundTime = now() + TIMEOUTS.outBchRefundSeconds;
   const params: BchLockParams = {
     secretHash,
