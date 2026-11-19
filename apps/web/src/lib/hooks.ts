@@ -114,7 +114,7 @@ export function useSwapRunner(deps: {
     setStage('claiming');
     void bch; void evmAddress;
     const run = local.direction === 'in'
-      ? claimSwapIn(swap, info.pusdCategory)
+      ? claimSwapIn(swap)
       : revealSwapOut(swap, info);
     run
       .then(() => { handled.current.add(swap.id); })

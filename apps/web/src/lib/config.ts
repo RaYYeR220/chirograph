@@ -1,4 +1,4 @@
-import type { BchNetwork } from '@chirograph/sdk';
+import { PUSD_CATEGORY, EVM_CHAINS, type BchNetwork } from '@chirograph/sdk';
 
 const env = import.meta.env;
 
@@ -27,3 +27,21 @@ export const BCH_ADDRESS_URL = (address: string) =>
   CONFIG.bchNetwork === 'mainnet'
     ? `https://explorer.selene.cash/address/${address}`
     : `https://explorer.selene.cash/address/${address}?network=chipnet`;
+
+/**
+ * Trust anchors pinned in the app itself. The solver's /v1/info is only a hint: an escrow address,
+ * USDC address or token category that does not match these is rejected before anything is signed.
+ */
+export const TRUST = {
+  tokenCategory: ((env.VITE_TOKEN_CATEGORY as string | undefined) ?? PUSD_CATEGORY).toLowerCase(),
+  chains: {
+    8453: {
+      usdc: ((env.VITE_USDC_8453 as string | undefined) ?? EVM_CHAINS.base.usdc).toLowerCase(),
+      htlc: ((env.VITE_HTLC_8453 as string | undefined) ?? EVM_CHAINS.base.htlc ?? '').toLowerCase(),
+    },
+    42161: {
+      usdc: ((env.VITE_USDC_42161 as string | undefined) ?? EVM_CHAINS.arbitrum.usdc).toLowerCase(),
+      htlc: ((env.VITE_HTLC_42161 as string | undefined) ?? EVM_CHAINS.arbitrum.htlc ?? '').toLowerCase(),
+    },
+  } as Record<number, { usdc: string; htlc: string }>,
+};

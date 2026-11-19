@@ -6,7 +6,7 @@ import {
   generateSecret, hashSecret, htlcAbi, lockAuthorization, makeLockContract, to0x, usdcDomain,
   type BchLockParams, type Quote, type SolverInfo, type SwapRecord,
 } from '@chirograph/sdk';
-import { CONFIG } from './config';
+import { CONFIG, TRUST } from './config';
 import { bchProvider, scanWallet, signAndBroadcast, waitForUtxo, type WalletSnapshot } from './bchWallet';
 import { publicClient } from './evm';
 
@@ -18,6 +18,28 @@ const CLAIM_SAFETY_SECONDS = 15 * 60;
 const MIN_TIMEOUT_GAP_SECONDS = 60 * 60;
 /** How long the browser watches an unconfirmed solver lock for a double-spend proof before claiming. */
 const DSPROOF_WINDOW_MS = 1_500;
+
+// ------------------------------------------------------------------ trust anchors
+
+type SolverChain = SolverInfo['chains'][number];
+
+/** A chain the solver advertises, accepted only if its escrow and USDC match the app's pins. */
+export function trustedChain(info: SolverInfo, key: string): SolverChain {
+  const chain = info.chains.find((c) => c.key === key);
+  if (!chain) throw new Error(`the solver does not serve ${key}`);
+  const pin = TRUST.chains[chain.chainId];
+  if (!pin || !pin.htlc) throw new Error(`no pinned escrow for chain ${chain.chainId}`);
+  if (chain.htlc.toLowerCase() !== pin.htlc || chain.usdc.toLowerCase() !== pin.usdc) {
+    throw new Error('the solver advertises an escrow or token this app does not trust');
+  }
+  return chain;
+}
+
+/** The token category we trade, pinned in the app; the solver must agree. */
+export function trustedCategory(info: SolverInfo): string {
+  if (info.pusdCategory.toLowerCase() !== TRUST.tokenCategory) throw new Error('the solver trades a token this app does not trust');
+  return TRUST.tokenCategory;
+}
 
 // ------------------------------------------------------------------ local secret vault
 
@@ -63,7 +85,8 @@ export interface InArgs {
 
 /** One signature: an EIP-3009 authorization the relayer submits. Returns the swap id. */
 export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
-  const chain = a.info.chains.find((c) => c.key === a.quote.chain)!;
+  const chain = trustedChain(a.info, a.quote.chain);
+  if (a.quote.htlc.toLowerCase() !== chain.htlc.toLowerCase()) throw new Error('quote escrow mismatch');
   const secret = generateSecret();
   const secretHash = to0x(hashSecret(secret));
   const id = secretHash.slice(2);
@@ -90,7 +113,8 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
  * lock really pays our address with the quoted amount; otherwise we keep the secret and wait for
  * the automatic refund.
  */
-export async function claimSwapIn(swap: SwapRecord, category: string): Promise<string> {
+export async function claimSwapIn(swap: SwapRecord): Promise<string> {
+  const category = TRUST.tokenCategory;
   const local = storedSwap(swap.id);
   const secret = secretFor(swap.id);
   if (!local || !secret || local.direction !== 'in') throw new Error('this browser does not hold this swap');
@@ -144,7 +168,8 @@ export interface OutArgs {
 
 /** One signature: the wallet signs a BCH lock that also commits to the EVM payout address. */
 export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
-  const chain = a.info.chains.find((c) => c.key === a.quote.chain)!;
+  const chain = trustedChain(a.info, a.quote.chain);
+  const category = trustedCategory(a.info);
   const p = await bchProvider();
   const secret = generateSecret();
   const secretHash = hashSecret(secret);
@@ -164,7 +189,7 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
   const change = a.wallet.addresses.find((x) => x.chain === 'change') ?? a.wallet.receive;
   const built = buildWalletLockTx({
     provider: p, contract, utxos: a.wallet.utxos,
-    token: { category: a.info.pusdCategory, amount: BigInt(a.quote.amountIn) },
+    token: { category, amount: BigInt(a.quote.amountIn) },
     changeAddress: change.address, tokenChangeAddress: a.wallet.receive.tokenAddress,
     memo: { chainId: chain.chainId, evmAddress: a.userEvm },
     userPrompt: `Lock ${(a.quote.amountIn / 100).toFixed(2)} PUSD for ${(a.quote.amountOut / 100).toFixed(2)} USDC on ${chain.key === 'arbitrum' ? 'Arbitrum' : 'Base'}`,
@@ -192,11 +217,10 @@ export async function revealSwapOut(swap: SwapRecord, info: SolverInfo): Promise
  * browser chose: the solver's USDC lock pays OUR address at least the quoted amount, under the hash
  * of OUR secret, is still open, and expires well before our own PUSD lock.
  */
-export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, secret: Uint8Array) {
+export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, secret: Uint8Array): Promise<SolverChain> {
   const local = storedSwap(swap.id);
   if (!local || local.direction !== 'out') throw new Error('this browser does not hold this swap');
-  const chain = info.chains.find((c) => c.key === local.chain);
-  if (!chain) throw new Error('unknown chain for this swap');
+  const chain = trustedChain(info, local.chain);
   const [, recipient, amount, secretHash, refundTime, state] = await publicClient(chain.chainId).readContract({
     address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
   });
@@ -206,6 +230,7 @@ export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, sec
   if (secretHash.toLowerCase() !== to0x(hashSecret(secret)).toLowerCase()) throw new Error('the solver lock uses a different hash; not revealing');
   if (Number(refundTime) - now() < CLAIM_SAFETY_SECONDS) throw new Error('too close to the solver refund time; not revealing');
   if (local.ownRefundTime - Number(refundTime) < MIN_TIMEOUT_GAP_SECONDS) throw new Error('solver timeout is not well before ours; not revealing');
+  return chain;
 }
 
 /**
@@ -218,8 +243,7 @@ export async function claimEvmDirect(
 ): Promise<Hex> {
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
-  await checkSolverEvmLock(swap, info, secret);
-  const chain = info.chains.find((c) => c.key === swap.chain)!;
+  const chain = await checkSolverEvmLock(swap, info, secret);
   return write({ address: chain.htlc, abi: htlcAbi, functionName: 'claim', args: [swap.evm.lockId as Hex, to0x(secret)], chainId: chain.chainId });
 }
 
