@@ -435,6 +435,8 @@ export class Engine {
       if (!swap.evm.lockId) {
         // Slow network checks first, outside the lock; then decide and record under it.
         if (sighting!.confirmations < 1 && swap.tier === 'instant') {
+          // The proof check only means something once the safety window has fully elapsed.
+          if (Date.now() < swap.createdAt * 1000 + this.cfg.dsproofWaitMs) return;
           if (!(await this.bch.inputsAreP2pkh(sighting!.utxo.txid))) return;
           if ((await this.bch.doubleSpendProof(sighting!.utxo.txid)) !== 'none') return;
         }
