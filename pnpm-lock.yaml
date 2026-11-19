@@ -35,6 +35,12 @@ importers:
       '@types/node':
         specifier: '24'
         version: 24.19.2
+      '@wizardconnect/core':
+        specifier: 0.2.11
+        version: 0.2.11(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      '@wizardconnect/wallet':
+        specifier: 0.2.5
+        version: 0.2.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
       typescript:
         specifier: '5'
         version: 5.9.3
@@ -1767,6 +1773,9 @@ packages:
     peerDependencies:
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
+
+  '@wizardconnect/wallet@0.2.5':
+    resolution: {integrity: sha512-QIow8hkdf7dyxl3NZvxqHcnx+GPycYYU7wXQ4oc4OagcG1CgEuGMIsEVrhuXIEu9oeGLFeN6aXKRCQb3FUOj1g==}
 
   abitype@1.0.6:
     resolution: {integrity: sha512-MMSqYh4+C/aVqI2RQaWqbvI4Kxo5cQV40WQ4QFtDnNzCkqChm8MuENhElmynZlO0qUy/ObkEUaXtKqYnx1Kp3A==}
@@ -5982,6 +5991,17 @@ snapshots:
       - typescript
       - utf-8-validate
 
+  '@wizardconnect/wallet@0.2.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@bitauth/libauth': 3.1.0-next.8
+      '@wizardconnect/core': 0.2.11(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      eventemitter3: 5.0.4
+    transitivePeerDependencies:
+      - bufferutil
+      - nostr-wasm
+      - typescript
+      - utf-8-validate
+
   abitype@1.0.6(typescript@5.9.3)(zod@3.25.76):
     optionalDependencies:
       typescript: 5.9.3
@@ -6895,7 +6915,7 @@ snapshots:
   ox@0.6.7(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
