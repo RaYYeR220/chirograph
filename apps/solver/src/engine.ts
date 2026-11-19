@@ -289,7 +289,9 @@ export class Engine {
       const expect = this.bchExpect(swap);
       // Only our own funding transaction counts. Dust or junk sent to the lock address by anyone
       // else is ignored, because the lock must match the exact txid we built and persisted.
-      if (swap.bch.lockTxid && (await this.bch.sight(params, expect))) {
+      // Our persisted lock tx is known to the network (mempool or chain): we are locked, even if the
+      // user has already claimed it and the UTXO is gone.
+      if (swap.bch.lockTxid && ((await this.bch.sight(params, expect)) || (await this.bch.txKnown(swap.bch.lockTxid)))) {
         swap.status = 'solver_locked';
         this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: swap.bch.lockTxid });
         return this.save(swap);
@@ -301,8 +303,9 @@ export class Engine {
         try {
           await this.bch.broadcast(swap.bch.lockHex);
         } catch (err) {
-          // Our inputs were spent elsewhere, so this exact lock can never confirm: build a fresh one.
-          if (/missing|spent|conflict/i.test(String((err as Error).message))) {
+          // Only rebuild if the network has never seen our lock tx AND it can no longer be broadcast
+          // (its inputs went to another transaction). A known tx means we are already locked.
+          if (!(await this.bch.txKnown(swap.bch.lockTxid!)) && /missing|spent|conflict/i.test(String((err as Error).message))) {
             swap.bch.lockHex = undefined;
             swap.bch.lockTxid = undefined;
             this.save(swap);

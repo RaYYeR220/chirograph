@@ -91,6 +91,16 @@ export class BchSide {
     return { utxo, confirmations: await this.confirmations(utxo.txid) };
   }
 
+  /** True if the network knows this transaction (mempool or chain). */
+  async txKnown(txid: string): Promise<boolean> {
+    try {
+      await this.provider.getRawTransaction(txid);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async confirmations(txid: string): Promise<number> {
     const tx = (await this.provider.performRequest('blockchain.transaction.get', txid, true)) as { confirmations?: number };
     return tx.confirmations ?? 0;
