@@ -4,8 +4,11 @@ import type { OpenInSwap, OpenOutSwap, QuoteRequest, SwapRecord } from '@chirogr
 import type { Engine } from './engine.js';
 import { UserError, publicMessage } from './errors.js';
 
+const OPENS_PER_MINUTE = Number(process.env.OPENS_PER_MINUTE ?? 6);
+
 export async function buildServer(engine: Engine) {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: 64 * 1024 });
+  // Behind Caddy: trust the proxy so req.ip is the real client address.
+  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: 64 * 1024, trustProxy: true });
   await app.register(cors, { origin: true });
 
   // Uniform error shape; never leak stack traces.
@@ -21,13 +24,22 @@ export async function buildServer(engine: Engine) {
   app.get('/v1/info', async () => engine.info());
   app.get('/v1/solver', async () => engine.addresses());
 
+  // A small per-IP budget on the calls that make the solver spend gas or lock inventory.
+  const opens = new Map<string, number[]>();
+  const limitOpens = (ip: string) => {
+    const t = Date.now();
+    const recent = (opens.get(ip) ?? []).filter((x) => t - x < 60_000);
+    if (recent.length >= OPENS_PER_MINUTE) throw new UserError('too many swaps from this address; try again in a minute');
+    recent.push(t);
+    opens.set(ip, recent);
+  };
+
   app.post<{ Body: QuoteRequest }>('/v1/quote', async (req) => engine.quote(req.body));
-  app.post<{ Body: OpenInSwap }>('/v1/swaps/in', async (req) => engine.openIn(req.body));
-  app.post<{ Body: OpenOutSwap }>('/v1/swaps/out', async (req) => engine.openOut(req.body));
+  app.post<{ Body: OpenInSwap }>('/v1/swaps/in', async (req) => { limitOpens(req.ip); return publicView(await engine.openIn(req.body)); });
+  app.post<{ Body: OpenOutSwap }>('/v1/swaps/out', async (req) => { limitOpens(req.ip); return publicView(await engine.openOut(req.body)); });
   app.post<{ Params: { id: string }; Body: { secret: string } }>('/v1/swaps/:id/reveal', async (req) =>
-    engine.reveal(req.params.id, req.body.secret));
-  app.post<{ Params: { id: string }; Body: { txid: string } }>('/v1/swaps/:id/claimed', async (req) =>
-    engine.claimed(req.params.id, req.body.txid));
+    publicView(await engine.reveal(req.params.id, req.body.secret)));
+  app.post<{ Params: { id: string } }>('/v1/swaps/:id/claimed', async (req) => publicView(await engine.claimed(req.params.id)));
 
   app.get<{ Querystring: { limit?: string } }>('/v1/swaps', async (req) =>
     engine.list(Number(req.query.limit ?? 50)).map(publicView));

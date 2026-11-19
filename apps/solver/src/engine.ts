@@ -9,9 +9,9 @@ import {
 } from '@chirograph/sdk';
 import type { SolverConfig } from './config.js';
 import type { SwapStore } from './db.js';
-import type { BchSide } from './bch.js';
+import type { BchSide, LockSighting } from './bch.js';
 import type { EvmSide } from './evm.js';
-import { now } from './mutex.js';
+import { Mutex, now } from './mutex.js';
 import { UserError, publicMessage } from './errors.js';
 
 const TERMINAL: SwapStatus[] = ['completed', 'refunded', 'failed'];
@@ -21,11 +21,19 @@ const TIMEOUT_SLACK = 30 * 60;
 const MTP_LAG = 60 * 60;
 /** Minimum time the counterparty keeps to reuse a revealed secret before the other side can refund. */
 const MIN_CLAIM_MARGIN = 90 * 60;
+/** Never (re)broadcast a second-leg lock with less than this left before it can be refunded. */
+const SEND_DEADLINE = 30 * 60;
+/** How long past a user authorization's validBefore we keep waiting for the relayed lock. */
+const RELAY_GRACE = 10 * 60;
+/** Fees per in-swap paid from the solver's BCH: the lock's carried sats plus two small fees. */
+const SATS_PER_IN_SWAP = LOCK_SATS + 2_000n;
 
 export class Engine {
   readonly events = new EventEmitter();
   private busy = new Set<string>();
   private inventory = { tokens: 0n, sats: 0n, usdc: new Map<EvmChainKey, bigint>(), at: 0 };
+  /** Capacity check and reservation happen under one lock, so concurrent opens cannot over-commit. */
+  private openLock = new Mutex();
 
   constructor(
     private cfg: SolverConfig,
@@ -42,16 +50,18 @@ export class Engine {
     await this.refreshInventory();
     const pusd = Number(this.inventory.tokens);
     const reserved = this.reserved();
+    // Every USDC -> PUSD swap spends some of our BCH on its lock and fees; stop before we run dry.
+    const satsBudget = this.inventory.sats - this.cfg.satsReserve - BigInt(reserved.inSwaps) * SATS_PER_IN_SWAP;
+    const bchOk = satsBudget >= SATS_PER_IN_SWAP;
     const capacity: SolverInfo['capacity'] = {};
     const usdc: Record<string, number> = {};
-    for (const [key, side] of this.evm) {
+    for (const key of this.evm.keys()) {
       const bal = Number((this.inventory.usdc.get(key) ?? 0n) / USDC_UNITS_PER_PUSD_UNIT);
       usdc[key] = bal;
       capacity[key] = {
-        in: Math.max(0, Math.min(this.cfg.swapMax, pusd - reserved.tokens)),
-        out: Math.max(0, Math.min(this.cfg.swapMax, bal - (reserved.usdc.get(key) ?? 0))),
+        in: bchOk ? Math.max(0, Math.min(this.cfg.swapMax, pusd - reserved.tokens)) : 0,
+        out: this.inventory.sats >= this.cfg.satsReserve ? Math.max(0, Math.min(this.cfg.swapMax, bal - (reserved.usdc.get(key) ?? 0))) : 0,
       };
-      void side;
     }
     return {
       name: this.cfg.publicName,
@@ -65,13 +75,14 @@ export class Engine {
       instantTierMax: this.cfg.instantMax,
       inventory: { pusd, bchSats: this.inventory.sats.toString(), usdc },
       pusdCategory: this.cfg.tokenCategory,
-      version: '0.1.0',
+      version: '0.2.0',
     };
   }
 
   async quote(q: QuoteRequest): Promise<Quote> {
     const side = this.side(q.chain);
     if (!Number.isInteger(q.amount) || q.amount <= 0) throw new UserError('amount must be a positive number of cents');
+    if (q.amount < this.cfg.minSwap) throw new UserError(`the smallest swap is ${this.cfg.minSwap} cents`);
     const info = await this.info();
     const cap = info.capacity[q.chain]![q.direction];
     if (q.amount > cap) throw new UserError(`the solver can fill at most ${cap} cents in this direction right now`);
@@ -98,46 +109,46 @@ export class Engine {
    */
   async openIn(body: OpenInSwap): Promise<SwapRecord> {
     const side = this.side(body.chain);
-    const t = now();
     const secretHash = normHash(body.secretHash);
-    if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
-    const quote = await this.quote({ direction: 'in', chain: body.chain, amount: body.amount });
+    const t = now();
     checkWindow(body.evmRefundTime, t + TIMEOUTS.inEvmRefundSeconds, 'EVM refund time');
     if (body.validBefore < t + 60 || body.validBefore > t + 3_600) throw new UserError('authorization must stay valid for 1-60 minutes');
     const userBytecode = userAddressBytecode(body.userBchAddress);
-
     const amountUsdc = BigInt(body.amount) * USDC_UNITS_PER_PUSD_UNIT;
-    const evmParams = {
+    const lockId = computeLockId({
       chainId: side.chain.chainId, htlc: side.chain.htlc, token: side.chain.usdc,
       sender: body.userEvm, recipient: side.address, amount: amountUsdc,
       secretHash: `0x${secretHash}` as Hex, refundTime: BigInt(body.evmRefundTime),
-    };
-    const lockId = computeLockId(evmParams);
-
-    const swap: SwapRecord = {
-      id: secretHash, direction: 'in', chain: body.chain, status: 'awaiting_user_lock', tier: quote.tier,
-      amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, secretHash,
-      user: { bchAddress: body.userBchAddress, evmAddress: body.userEvm },
-      // The BCH lock's refund time (and so its address) is fixed when the solver actually locks.
-      bch: {
-        lockAddress: '', refundTime: 0,
-        claimBytecode: binToHex(userBytecode), refundBytecode: binToHex(this.bch.bytecode), tokenAmount: quote.amountOut,
-      },
-      evm: {
-        htlc: side.chain.htlc, lockId, refundTime: body.evmRefundTime, amount: amountUsdc.toString(),
-        sender: body.userEvm, recipient: side.address,
-      },
-      createdAt: t, updatedAt: t, timeline: [{ at: t, event: 'Swap opened: USDC -> PUSD', chain: body.chain }],
-    };
-
-    // Relay now so a bad signature fails the request instead of a background job.
-    const hash = await side.relayUserLock({
-      from: body.userEvm, recipient: side.address, amount: amountUsdc, secretHash: `0x${secretHash}`,
-      refundTime: BigInt(body.evmRefundTime), validAfter: 0n, validBefore: BigInt(body.validBefore), signature: body.signature,
     });
-    swap.evm.lockTx = hash;
-    this.log(swap, { event: 'Your USDC lock was submitted (relayer paid the gas)', chain: body.chain, txid: hash });
-    this.save(swap);
+
+    const swap = await this.openLock.run(async () => {
+      if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
+      const quote = await this.quote({ direction: 'in', chain: body.chain, amount: body.amount });
+      const record: SwapRecord = {
+        id: secretHash, direction: 'in', chain: body.chain, status: 'awaiting_user_lock', tier: quote.tier,
+        amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, secretHash,
+        user: { bchAddress: body.userBchAddress, evmAddress: body.userEvm },
+        // The BCH lock's refund time (and so its address) is fixed when the solver actually locks.
+        bch: {
+          lockAddress: '', refundTime: 0,
+          claimBytecode: binToHex(userBytecode), refundBytecode: binToHex(this.bch.bytecode), tokenAmount: quote.amountOut,
+        },
+        evm: {
+          htlc: side.chain.htlc, lockId, refundTime: body.evmRefundTime, amount: amountUsdc.toString(),
+          sender: body.userEvm, recipient: side.address, validBefore: body.validBefore,
+        },
+        createdAt: t, updatedAt: t, timeline: [{ at: t, event: 'Swap opened: USDC -> PUSD', chain: body.chain }],
+      };
+      // Relay inside the reservation so a bad signature fails the request and frees the capacity.
+      const hash = await side.relayUserLock({
+        from: body.userEvm, recipient: side.address, amount: amountUsdc, secretHash: `0x${secretHash}`,
+        refundTime: BigInt(body.evmRefundTime), validAfter: 0n, validBefore: BigInt(body.validBefore), signature: body.signature,
+      });
+      record.evm.lockTx = hash;
+      this.log(record, { event: 'Your USDC lock was submitted (relayer paid the gas)', chain: body.chain, txid: hash });
+      this.save(record);
+      return record;
+    });
     void this.advance(swap.id);
     return swap;
   }
@@ -148,24 +159,22 @@ export class Engine {
    */
   async openOut(body: OpenOutSwap): Promise<SwapRecord> {
     const side = this.side(body.chain);
-    const t = now();
     const secretHash = normHash(body.secretHash);
-    if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
-    const quote = await this.quote({ direction: 'out', chain: body.chain, amount: body.amount });
+    if (!/^[0-9a-f]{64}$/.test(body.lockTxid ?? '')) throw new UserError('lockTxid must be a transaction id');
+    const t = now();
     checkWindow(body.bchRefundTime, t + TIMEOUTS.outBchRefundSeconds, 'BCH refund time');
     const userBytecode = userAddressBytecode(body.userBchAddress);
     const bchParams: BchLockParams = {
       secretHash: hexToBin(secretHash), claimBytecode: this.bch.bytecode, refundBytecode: userBytecode,
       refundTime: BigInt(body.bchRefundTime),
     };
+    // The lock must carry the full LOCK_SATS: our claim is keyless and pays its fee from them.
+    const expect = { category: this.cfg.tokenCategory, amount: BigInt(body.amount), minSats: LOCK_SATS, txid: body.lockTxid };
     // The user's wallet broadcast through its own server; give propagation a moment before we decide.
-    let sighting: Awaited<ReturnType<BchSide['sight']>>;
-    for (let attempt = 0; attempt < 24; attempt++) {
-      sighting = await this.bch.sight(bchParams, {
-        category: this.cfg.tokenCategory, amount: BigInt(body.amount), minSats: LOCK_SATS / 2n, txid: body.lockTxid,
-      });
-      if (sighting) break;
-      await new Promise((r) => setTimeout(r, 500));
+    let sighting: LockSighting | undefined;
+    for (let attempt = 0; attempt < 12 && !sighting; attempt++) {
+      sighting = await this.bch.sight(bchParams, expect);
+      if (!sighting) await new Promise((r) => setTimeout(r, 500));
     }
     if (!sighting) throw new UserError('no matching lock found at the expected address; wrong parameters or not broadcast yet');
     // The EVM payout address must come from the lock transaction itself (signed by the lock's owner).
@@ -174,28 +183,35 @@ export class Engine {
       throw new UserError('the lock transaction does not commit to this EVM payout address and chain');
     }
 
-    const amountUsdc = BigInt(quote.amountOut) * USDC_UNITS_PER_PUSD_UNIT;
-    const swap: SwapRecord = {
-      id: secretHash, direction: 'out', chain: body.chain, status: 'user_locked', tier: quote.tier,
-      amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, secretHash,
-      user: { bchAddress: body.userBchAddress, evmAddress: body.userEvm },
-      bch: {
-        lockAddress: this.bch.contract(bchParams).tokenAddress, refundTime: body.bchRefundTime,
-        claimBytecode: binToHex(this.bch.bytecode), refundBytecode: binToHex(userBytecode), tokenAmount: body.amount,
-        lockTxid: body.lockTxid,
-      },
-      // The EVM lock's refund time (and so its id) is fixed when the solver actually locks.
-      evm: {
-        htlc: side.chain.htlc, lockId: '', refundTime: 0, amount: amountUsdc.toString(),
-        sender: side.address, recipient: body.userEvm,
-      },
-      createdAt: t, updatedAt: t,
-      timeline: [
-        { at: t, event: 'Swap opened: PUSD -> USDC', chain: 'bch' },
-        { at: t, event: `Your PUSD is locked on Bitcoin Cash (${sighting.confirmations} conf)`, chain: 'bch', txid: body.lockTxid },
-      ],
-    };
-    this.save(swap);
+    const swap = await this.openLock.run(async () => {
+      if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
+      // One swap per lock transaction: several locks under one memo would multiply 0-conf exposure.
+      if (this.store.byLockTxid(body.lockTxid)) throw new UserError('this lock transaction already backs a swap');
+      const quote = await this.quote({ direction: 'out', chain: body.chain, amount: body.amount });
+      const amountUsdc = BigInt(quote.amountOut) * USDC_UNITS_PER_PUSD_UNIT;
+      const record: SwapRecord = {
+        id: secretHash, direction: 'out', chain: body.chain, status: 'user_locked', tier: quote.tier,
+        amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, secretHash,
+        user: { bchAddress: body.userBchAddress, evmAddress: body.userEvm },
+        bch: {
+          lockAddress: this.bch.contract(bchParams).tokenAddress, refundTime: body.bchRefundTime,
+          claimBytecode: binToHex(this.bch.bytecode), refundBytecode: binToHex(userBytecode), tokenAmount: body.amount,
+          lockTxid: body.lockTxid,
+        },
+        // The EVM lock's refund time (and so its id) is fixed when the solver actually locks.
+        evm: {
+          htlc: side.chain.htlc, lockId: '', refundTime: 0, amount: amountUsdc.toString(),
+          sender: side.address, recipient: body.userEvm,
+        },
+        createdAt: t, updatedAt: t,
+        timeline: [
+          { at: t, event: 'Swap opened: PUSD -> USDC', chain: 'bch' },
+          { at: t, event: `Your PUSD is locked on Bitcoin Cash (${sighting!.confirmations} conf)`, chain: 'bch', txid: body.lockTxid },
+        ],
+      };
+      this.save(record);
+      return record;
+    });
     void this.advance(swap.id);
     return swap;
   }
@@ -204,26 +220,25 @@ export class Engine {
   async reveal(id: string, secretHex: string): Promise<SwapRecord> {
     const swap = this.must(id);
     const secret = hexToBin(secretHex.replace(/^0x/, ''));
-    if (binToHex(hashSecret(secret)) !== swap.secretHash) throw new UserError('secret does not match this swap');
+    if (secret.length !== 32 || binToHex(hashSecret(secret)) !== swap.secretHash) throw new UserError('secret does not match this swap');
     if (swap.direction !== 'out') throw new UserError('only PUSD -> USDC swaps take a reveal');
-    if (swap.status !== 'solver_locked') throw new UserError(`swap is ${swap.status}, cannot reveal now`);
+    if (swap.status !== 'solver_locked' && swap.status !== 'secret_revealed') throw new UserError(`swap is ${swap.status}, cannot reveal now`);
+    if (now() >= swap.evm.refundTime) throw new UserError('the USDC lock has expired; claim it on-chain before it is refunded');
+    // From here on we know the secret, so we will never refund our USDC lock: we claim it for the user.
     swap.secret = binToHex(secret);
-    const side = this.side(swap.chain);
-    const hash = await side.claim(swap.evm.lockId as Hex, `0x${swap.secret}`);
-    swap.evm.spendTx = hash;
-    swap.status = 'secret_revealed';
-    this.log(swap, { event: 'Your USDC claim was submitted (relayer paid the gas)', chain: swap.chain, txid: hash });
+    if (swap.status === 'solver_locked') {
+      swap.status = 'secret_revealed';
+      this.log(swap, { event: 'Secret received; claiming your USDC (relayer pays the gas)', chain: swap.chain });
+    }
     this.save(swap);
     void this.advance(swap.id);
     return swap;
   }
 
-  /** USDC -> PUSD: the browser tells us its claim txid so we don't wait for the next poll. */
-  async claimed(id: string, txid: string): Promise<SwapRecord> {
+  /** USDC -> PUSD: a nudge from the browser after it broadcast its claim; we verify on-chain ourselves. */
+  async claimed(id: string): Promise<SwapRecord> {
     const swap = this.must(id);
     if (swap.direction !== 'in') throw new UserError('only USDC -> PUSD swaps report a BCH claim');
-    if (!swap.bch.spendTxid) swap.bch.spendTxid = txid;
-    this.save(swap);
     void this.advance(swap.id);
     return swap;
   }
@@ -261,121 +276,144 @@ export class Engine {
 
   private async advanceIn(swap: SwapRecord) {
     const side = this.side(swap.chain);
-    const bchParams = () => this.bchParams(swap);
+    const lockId = swap.evm.lockId as Hex;
 
     if (swap.status === 'awaiting_user_lock') {
-      await side.waitFor(swap.evm.lockTx as Hex, side.chain.confirmations);
-      const lock = await side.readLock(swap.evm.lockId as Hex);
-      if (lock.state !== LockState.Open || lock.amount !== BigInt(swap.evm.amount) || lock.recipient !== side.address) {
+      const status = await side.receiptStatus(swap.evm.lockTx as Hex);
+      if (status === 'pending') return;
+      const lock = await side.readLock(lockId);
+      const matches = lock.state === LockState.Open && lock.amount === BigInt(swap.evm.amount) && lock.recipient === side.address;
+      if (matches && (status === 'success' || status === 'reverted' || status === 'unknown')) {
+        // A reverted relay can still mean the lock exists (someone else submitted the same authorization).
+        swap.status = 'user_locked';
+        this.log(swap, { event: 'Your USDC is locked on-chain', chain: swap.chain, txid: swap.evm.lockTx });
+        this.save(swap);
+      } else if (status === 'reverted' || (status === 'unknown' && now() > (swap.evm.validBefore ?? swap.createdAt + 3_600) + RELAY_GRACE)) {
         swap.status = 'failed';
-        this.log(swap, { event: 'User lock does not match the swap; nothing was sent', chain: swap.chain });
+        this.log(swap, { event: 'Your USDC lock did not go through; nothing was moved', chain: swap.chain });
         return this.save(swap);
-      }
-      swap.status = 'user_locked';
-      this.log(swap, { event: 'Your USDC is locked on-chain', chain: swap.chain, txid: swap.evm.lockTx });
-      this.save(swap);
-    }
-
-    if (swap.status === 'user_locked') {
-      // Fix the BCH lock's parameters exactly once and persist them before broadcasting, so a retry
-      // targets the same lock address and can never lock our PUSD twice under one secret.
-      if (!swap.bch.refundTime) {
-        const refundTime = now() + TIMEOUTS.inBchRefundSeconds;
-        // BCH refunds trail wall-clock by up to ~1h (MTP), and we need time to claim USDC afterwards.
-        if (swap.evm.refundTime - refundTime < MIN_CLAIM_MARGIN + MTP_LAG) {
-          swap.status = 'refunding';
-          this.log(swap, { event: 'Too close to your refund time to lock safely; your USDC will be refunded', chain: swap.chain });
-          return this.save(swap);
-        }
-        swap.bch.refundTime = refundTime;
-        swap.bch.lockAddress = this.bch.contract(this.bchParams(swap)).tokenAddress;
-        this.save(swap);
-      }
-      const params = this.bchParams(swap);
-      const expect = this.bchExpect(swap);
-      // Only our own funding transaction counts. Dust or junk sent to the lock address by anyone
-      // else is ignored, because the lock must match the exact txid we built and persisted.
-      // Our persisted lock tx is known to the network (mempool or chain): we are locked, even if the
-      // user has already claimed it and the UTXO is gone.
-      if (swap.bch.lockTxid && ((await this.bch.sight(params, expect)) || (await this.bch.txKnown(swap.bch.lockTxid)))) {
-        swap.status = 'solver_locked';
-        this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: swap.bch.lockTxid });
-        return this.save(swap);
-      }
-      if (swap.bch.lockHex) {
-        if (swap.bch.lockAttemptAt && now() - swap.bch.lockAttemptAt < 30) return; // let the indexer catch up
-        swap.bch.lockAttemptAt = now();
-        this.save(swap);
-        try {
-          await this.bch.broadcast(swap.bch.lockHex);
-        } catch (err) {
-          // Only rebuild if the network has never seen our lock tx AND it can no longer be broadcast
-          // (its inputs went to another transaction). A known tx means we are already locked.
-          if (!(await this.bch.txKnown(swap.bch.lockTxid!)) && /missing|spent|conflict/i.test(String((err as Error).message))) {
-            swap.bch.lockHex = undefined;
-            swap.bch.lockTxid = undefined;
-            this.save(swap);
-          }
-          throw err;
-        }
+      } else {
         return;
       }
-      const built = await this.bch.buildTokenLock(params, BigInt(swap.bch.tokenAmount));
-      swap.bch.lockHex = built.hex;
-      swap.bch.lockTxid = built.txid;
-      swap.bch.lockAttemptAt = now();
-      this.save(swap);
-      await this.bch.broadcast(built.hex);
-      swap.status = 'solver_locked';
-      this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: built.txid });
-      return this.save(swap);
     }
 
-    if (swap.status === 'solver_locked' || swap.status === 'secret_revealed') {
-      const found = await this.bch.findClaimSecret(bchParams(), swap.bch.lockTxid);
+    if (swap.status === 'user_locked') return this.lockPusdForUser(swap, side);
+
+    if (swap.status === 'solver_locked' || swap.status === 'secret_revealed' || swap.status === 'refunding') {
+      // Whatever else is going on, a public claim on BCH means we must collect the USDC with it.
+      const found = swap.bch.lockTxid ? await this.bch.findClaimSecret(this.bchParams(swap), swap.bch.lockTxid) : undefined;
       if (found) {
         swap.secret = binToHex(found.secret);
         swap.bch.spendTxid = found.txid;
-        if (swap.status === 'solver_locked') {
+        if (swap.status !== 'secret_revealed') {
           swap.status = 'secret_revealed';
           this.log(swap, { event: 'You claimed your PUSD (the secret is now public)', chain: 'bch', txid: found.txid });
           this.save(swap);
         }
-        const lock = await side.readLock(swap.evm.lockId as Hex);
+        const lock = await side.readLock(lockId);
         if (lock.state === LockState.Open) {
-          const hash = await side.claim(swap.evm.lockId as Hex, `0x${swap.secret}`);
-          await side.waitFor(hash);
+          const hash = await side.claim(lockId, `0x${swap.secret}`);
           swap.evm.spendTx = hash;
+          this.save(swap);
+          await side.waitFor(hash);
+        } else if (lock.state === LockState.Refunded) {
+          swap.status = 'failed';
+          this.log(swap, { event: 'USDC lock was refunded before the solver could collect it', chain: swap.chain });
+          return this.save(swap);
         }
         swap.status = 'completed';
         this.log(swap, { event: 'Solver collected the USDC with the same secret. Swap complete.', chain: swap.chain, txid: swap.evm.spendTx });
         return this.save(swap);
       }
-      // Nobody claimed: once BCH time allows, return our PUSD; the user's USDC refund follows on EVM.
-      if (swap.status === 'solver_locked' && (await this.bch.medianTimePast()) > swap.bch.refundTime) {
-        const txid = await this.bch.spend(bchParams(), this.bchExpect(swap), 'refund');
-        swap.bch.spendTxid = txid;
-        swap.bch.refunded = true;
-        swap.status = 'refunding';
-        this.log(swap, { event: 'Timed out: solver PUSD lock refunded', chain: 'bch', txid });
-        return this.save(swap);
-      }
     }
 
-    if (swap.status === 'refunding') {
-      if (now() >= swap.evm.refundTime) {
-        const lock = await side.readLock(swap.evm.lockId as Hex);
-        if (lock.state === LockState.Open) {
-          const hash = await side.refund(swap.evm.lockId as Hex);
-          await side.waitFor(hash);
-          swap.evm.spendTx = hash;
-        }
-        swap.evm.refunded = true;
-        swap.status = 'refunded';
-        this.log(swap, { event: 'Your USDC was refunded to you', chain: swap.chain, txid: swap.evm.spendTx });
-        return this.save(swap);
-      }
+    if (swap.status === 'solver_locked' && (await this.bch.medianTimePast()) > swap.bch.refundTime) {
+      // Nobody claimed in time: take our PUSD back; the user's USDC refund follows on EVM.
+      const txid = await this.bch.spend(this.bchParams(swap), this.bchExpect(swap), 'refund');
+      swap.bch.spendTxid = txid;
+      swap.bch.refunded = true;
+      swap.status = 'refunding';
+      this.log(swap, { event: 'Timed out: solver PUSD lock refunded', chain: 'bch', txid });
+      return this.save(swap);
     }
+
+    if (swap.status === 'refunding' && now() >= swap.evm.refundTime) {
+      // The claim check above ran first, so the secret never appeared on BCH: return the user's USDC.
+      const lock = await side.readLock(lockId);
+      if (lock.state === LockState.Open) {
+        const hash = await side.refund(lockId);
+        swap.evm.spendTx = hash;
+        this.save(swap);
+        await side.waitFor(hash);
+      }
+      swap.evm.refunded = true;
+      swap.status = 'refunded';
+      this.log(swap, { event: 'Your USDC was refunded to you', chain: swap.chain, txid: swap.evm.spendTx });
+      return this.save(swap);
+    }
+  }
+
+  /**
+   * Lock PUSD for the user. Parameters are fixed once and persisted before the first broadcast, and
+   * every (re)broadcast re-checks that it is still safe: the user's USDC lock must still be open and
+   * there must be time left for them to claim and for us to collect.
+   */
+  private async lockPusdForUser(swap: SwapRecord, side: EvmSide) {
+    if (!swap.bch.refundTime) {
+      const refundTime = now() + TIMEOUTS.inBchRefundSeconds;
+      // BCH refunds trail wall-clock by up to ~1h (MTP), and we need time to claim USDC afterwards.
+      if (swap.evm.refundTime - refundTime < MIN_CLAIM_MARGIN + MTP_LAG) return this.abandonIn(swap, 'Too close to your refund time to lock safely');
+      swap.bch.refundTime = refundTime;
+      swap.bch.lockAddress = this.bch.contract(this.bchParams(swap)).tokenAddress;
+      this.save(swap);
+    }
+    const params = this.bchParams(swap);
+    // Our persisted lock tx is known to the network: we are locked (even if already claimed).
+    if (swap.bch.lockTxid && ((await this.bch.sight(params, this.bchExpect(swap))) || (await this.bch.txKnown(swap.bch.lockTxid)))) {
+      swap.status = 'solver_locked';
+      this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: swap.bch.lockTxid });
+      return this.save(swap);
+    }
+    // Not on the network yet. Before any (re)broadcast, re-check that locking is still safe.
+    const userLock = await side.readLock(swap.evm.lockId as Hex);
+    if (userLock.state !== LockState.Open || swap.bch.refundTime - now() < SEND_DEADLINE) {
+      return this.abandonIn(swap, 'Could not lock PUSD in time');
+    }
+    if (swap.bch.lockHex) {
+      if (swap.bch.lockAttemptAt && now() - swap.bch.lockAttemptAt < 30) return; // let the indexer catch up
+      swap.bch.lockAttemptAt = now();
+      this.save(swap);
+      try {
+        await this.bch.broadcast(swap.bch.lockHex);
+      } catch (err) {
+        // Only rebuild if the network has never seen our lock tx AND it can no longer be broadcast
+        // (its inputs went to another transaction). A known tx means we are already locked.
+        if (!(await this.bch.txKnown(swap.bch.lockTxid!)) && /missing|spent|conflict/i.test(String((err as Error).message))) {
+          swap.bch.lockHex = undefined;
+          swap.bch.lockTxid = undefined;
+          this.save(swap);
+        }
+        throw err;
+      }
+      return;
+    }
+    const built = await this.bch.buildTokenLock(params, BigInt(swap.bch.tokenAmount));
+    swap.bch.lockHex = built.hex;
+    swap.bch.lockTxid = built.txid;
+    swap.bch.lockAttemptAt = now();
+    this.save(swap);
+    await this.bch.broadcast(built.hex);
+    swap.status = 'solver_locked';
+    this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: built.txid });
+    return this.save(swap);
+  }
+
+  /** Give up on locking PUSD (never broadcast): the user's USDC refunds after its timeout. */
+  private abandonIn(swap: SwapRecord, why: string) {
+    swap.status = 'refunding';
+    swap.bch.lockHex = undefined;
+    this.log(swap, { event: `${why}; your USDC will be refunded`, chain: swap.chain });
+    return this.save(swap);
   }
 
   private async advanceOut(swap: SwapRecord) {
@@ -384,7 +422,7 @@ export class Engine {
 
     if (swap.status === 'user_locked') {
       const sighting = await this.bch.sight(bchParams, this.bchExpect(swap));
-      if (!sighting) {
+      if (!sighting && !swap.evm.lockId) {
         // The user's lock vanished before we acted: double-spent or already refunded. Stop here.
         swap.status = 'failed';
         this.log(swap, { event: 'Your BCH lock is no longer on-chain; solver did not lock USDC', chain: 'bch' });
@@ -393,11 +431,7 @@ export class Engine {
       // Fix the EVM lock's parameters exactly once, before the first send. Identical parameters give an
       // identical lock id, which the contract refuses to open twice, so a retry can never double-pay.
       if (!swap.evm.lockId) {
-        const ready = swap.tier === 'instant'
-          ? Date.now() >= swap.createdAt * 1000 + this.cfg.dsproofWaitMs && !(await this.bch.hasDoubleSpendProof(sighting.utxo.txid))
-          : sighting.confirmations >= 1;
-        if (!ready) return;
-        if (swap.tier === 'instant') this.log(swap, { event: 'No double-spend proof after the safety window; filling instantly', chain: 'bch' });
+        if (!(await this.readyToFill(swap, sighting!))) return;
         const refundTime = now() + TIMEOUTS.outEvmRefundSeconds;
         // We must be able to claim the user's PUSD after they reveal, before their BCH refund opens.
         if (swap.bch.refundTime - refundTime < MIN_CLAIM_MARGIN) {
@@ -417,7 +451,7 @@ export class Engine {
       if (existing.state === LockState.None) {
         if (swap.evm.lockTx && (await side.txPending(swap.evm.lockTx as Hex))) return; // still in flight
         if (swap.evm.lockAttemptAt && now() - swap.evm.lockAttemptAt < 90) return; // a send may still be in flight
-        if (now() >= swap.evm.refundTime - MIN_CLAIM_MARGIN / 3) {
+        if (!sighting || swap.evm.refundTime - now() < SEND_DEADLINE) {
           swap.status = 'refunding';
           this.log(swap, { event: 'Could not lock USDC in time; your PUSD refunds automatically', chain: 'bch' });
           return this.save(swap);
@@ -436,64 +470,35 @@ export class Engine {
       return this.save(swap);
     }
 
-    if (swap.status === 'solver_locked') {
-      const lock = await side.readLock(swap.evm.lockId as Hex);
-      if (lock.state === LockState.Claimed && !swap.secret) {
-        // The user claimed on-chain themselves; read the secret from the event logs.
-        const secret = await this.claimedSecret(side, swap.evm.lockId as Hex);
-        if (secret) {
-          swap.secret = secret.slice(2);
-          swap.status = 'secret_revealed';
-          this.log(swap, { event: 'You claimed your USDC on-chain', chain: swap.chain });
-          this.save(swap);
-        }
-      } else if (lock.state === LockState.Open && now() >= swap.evm.refundTime) {
-        const hash = await side.refund(swap.evm.lockId as Hex);
-        await side.waitFor(hash);
-        swap.evm.spendTx = hash;
-        swap.evm.refunded = true;
-        swap.status = 'refunding';
-        this.log(swap, { event: 'Timed out: solver USDC lock refunded', chain: swap.chain, txid: hash });
-        return this.save(swap);
-      }
-    }
-
-    if (swap.status === 'secret_revealed' && swap.secret) {
-      if (swap.evm.spendTx) await side.waitFor(swap.evm.spendTx as Hex).catch(() => undefined);
-      const txid = await this.bch.spend(bchParams, this.bchExpect(swap), 'claim', hexToBin(swap.secret));
-      swap.bch.spendTxid = txid;
-      swap.status = 'completed';
-      this.log(swap, { event: 'Solver collected the PUSD with the same secret. Swap complete.', chain: 'bch', txid });
-      return this.save(swap);
-    }
-
-    if (swap.status === 'refunding') {
-      // Before returning the user's PUSD, make sure our USDC lock (if one ever landed) is settled:
-      // if the user claimed it, we take the PUSD with the revealed secret instead.
+    if (swap.status === 'solver_locked' || swap.status === 'refunding') {
       if (swap.evm.lockId) {
         if (swap.evm.lockTx && (await side.txPending(swap.evm.lockTx as Hex))) return;
         const lock = await side.readLock(swap.evm.lockId as Hex);
         if (lock.state === LockState.Claimed) {
+          // The user (or anyone) claimed the USDC on-chain: the secret is public, collect the PUSD.
           const secret = await this.claimedSecret(side, swap.evm.lockId as Hex);
           if (secret) {
             swap.secret = secret.slice(2);
             swap.status = 'secret_revealed';
-            this.log(swap, { event: 'You claimed your USDC on-chain', chain: swap.chain });
+            this.log(swap, { event: 'Your USDC was claimed on-chain', chain: swap.chain });
             return this.save(swap);
           }
           return;
         }
-        if (lock.state === LockState.Open) {
-          if (now() < swap.evm.refundTime) return;
+        // Refund our USDC only if we never learned the secret.
+        if (lock.state === LockState.Open && now() >= swap.evm.refundTime && !swap.secret) {
           const hash = await side.refund(swap.evm.lockId as Hex);
-          await side.waitFor(hash);
           swap.evm.spendTx = hash;
-          swap.evm.refunded = true;
-          this.log(swap, { event: 'Timed out: solver USDC lock refunded', chain: swap.chain, txid: hash });
           this.save(swap);
+          await side.waitFor(hash);
+          swap.evm.refunded = true;
+          if (swap.status !== 'refunding') swap.status = 'refunding';
+          this.log(swap, { event: 'Timed out: solver USDC lock refunded', chain: swap.chain, txid: hash });
+          return this.save(swap);
         }
+        if (swap.status === 'solver_locked') return;
       }
-      // Return the user's PUSD as soon as BCH time allows. Anyone could do this; we do it for them.
+      // Refunding with nothing (left) on the EVM side: return the user's PUSD once BCH time allows.
       if ((await this.bch.medianTimePast()) > swap.bch.refundTime) {
         const txid = await this.bch.spend(bchParams, this.bchExpect(swap), 'refund');
         swap.bch.spendTxid = txid;
@@ -502,7 +507,58 @@ export class Engine {
         this.log(swap, { event: 'Your PUSD was refunded to you', chain: 'bch', txid });
         return this.save(swap);
       }
+      return;
     }
+
+    if (swap.status === 'secret_revealed' && swap.secret) {
+      // Make sure the user has their USDC before we take the PUSD: claim it for them if needed.
+      const lock = await side.readLock(swap.evm.lockId as Hex);
+      if (lock.state === LockState.Open) {
+        if (swap.evm.spendTx && (await side.txPending(swap.evm.spendTx as Hex))) return;
+        const hash = await side.claim(swap.evm.lockId as Hex, `0x${swap.secret}`);
+        swap.evm.spendTx = hash;
+        this.log(swap, { event: 'Your USDC claim was submitted (relayer paid the gas)', chain: swap.chain, txid: hash });
+        this.save(swap);
+        await side.waitFor(hash);
+        return;
+      }
+      if (lock.state !== LockState.Claimed) {
+        this.log(swap, { event: 'USDC lock is not claimable; not collecting the PUSD', chain: swap.chain });
+        swap.status = 'failed';
+        return this.save(swap);
+      }
+      const txid = await this.bch.spend(bchParams, this.bchExpect(swap), 'claim', hexToBin(swap.secret));
+      swap.bch.spendTxid = txid;
+      swap.status = 'completed';
+      this.log(swap, { event: 'Solver collected the PUSD with the same secret. Swap complete.', chain: 'bch', txid });
+      return this.save(swap);
+    }
+  }
+
+  /**
+   * When may we lock USDC against the user's BCH lock? Confirmed locks always; unconfirmed ones only
+   * in the instant tier, after the double-spend-proof window, when the lock is funded purely from
+   * P2PKH inputs (proofs only cover those), the proof server answered, and our total unconfirmed
+   * exposure stays under its cap.
+   */
+  private async readyToFill(swap: SwapRecord, sighting: LockSighting): Promise<boolean> {
+    if (sighting.confirmations >= 1) return true;
+    if (swap.tier !== 'instant') return false;
+    if (Date.now() < swap.createdAt * 1000 + this.cfg.dsproofWaitMs) return false;
+    if (this.instantExposure(swap.id) + swap.amountIn > this.cfg.instantExposureMax) return false;
+    if (!(await this.bch.inputsAreP2pkh(sighting.utxo.txid))) return false;
+    if ((await this.bch.doubleSpendProof(sighting.utxo.txid)) !== 'none') return false;
+    this.log(swap, { event: 'No double-spend proof after the safety window; filling instantly', chain: 'bch' });
+    return true;
+  }
+
+  /** Cents of PUSD -> USDC swaps we filled against locks that may still be unconfirmed. */
+  private instantExposure(except: string): number {
+    const horizon = now() - 2 * 3600;
+    return this.store.open()
+      .filter((s) => s.id !== except && s.direction === 'out' && s.tier === 'instant' && s.createdAt > horizon
+        && (s.status === 'solver_locked' || s.status === 'secret_revealed' || (s.status === 'user_locked' && !!s.evm.lockId)))
+      .reduce((sum, s) => sum + s.amountIn, 0);
   }
 
   // ---------------------------------------------------------------- helpers
@@ -526,7 +582,7 @@ export class Engine {
 
   private bchExpect(swap: SwapRecord) {
     return {
-      category: this.cfg.tokenCategory, amount: BigInt(swap.bch.tokenAmount), minSats: LOCK_SATS / 2n,
+      category: this.cfg.tokenCategory, amount: BigInt(swap.bch.tokenAmount), minSats: LOCK_SATS,
       txid: swap.bch.lockTxid,
     };
   }
@@ -546,15 +602,16 @@ export class Engine {
   private reserved() {
     const usdc = new Map<EvmChainKey, number>();
     let tokens = 0;
+    let inSwaps = 0;
     for (const s of this.store.open()) {
-      if (s.direction === 'in' && (s.status === 'awaiting_user_lock' || s.status === 'user_locked')) tokens += s.amountOut;
+      if (s.direction === 'in' && (s.status === 'awaiting_user_lock' || s.status === 'user_locked')) { tokens += s.amountOut; inSwaps++; }
       if (s.direction === 'out' && s.status === 'user_locked') usdc.set(s.chain, (usdc.get(s.chain) ?? 0) + s.amountOut);
     }
-    return { tokens, usdc };
+    return { tokens, usdc, inSwaps };
   }
 
   private async refreshInventory() {
-    if (Date.now() - this.inventory.at < 10_000) return;
+    if (Date.now() - this.inventory.at < 5_000) return;
     const inv = await this.bch.inventory();
     this.inventory.tokens = inv.tokens;
     this.inventory.sats = inv.sats;
@@ -585,7 +642,7 @@ export class Engine {
 }
 
 function normHash(h: string): string {
-  const hex = h.replace(/^0x/, '').toLowerCase();
+  const hex = String(h ?? '').replace(/^0x/, '').toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(hex)) throw new UserError('secret hash must be 32 bytes of hex');
   return hex;
 }

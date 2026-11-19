@@ -37,6 +37,12 @@ export interface SolverConfig {
   /** Largest swap (cents) we accept at all. */
   swapMax: number;
   dsproofWaitMs: number;
+  /** Smallest swap accepted (cents); keeps abandoned swaps from tying up inventory for free. */
+  minSwap: number;
+  /** Total unconfirmed 0-conf exposure (cents) across all open PUSD -> USDC swaps. */
+  instantExposureMax: number;
+  /** BCH kept back for fees; capacity drops to zero below it. */
+  satsReserve: bigint;
   pollMs: number;
   /** Token category the solver trades on BCH (PUSD on mainnet, a test token on chipnet). */
   tokenCategory: string;
@@ -74,6 +80,9 @@ export function loadConfig(): SolverConfig {
     instantMax: num('INSTANT_MAX_CENTS', 500),
     swapMax: num('SWAP_MAX_CENTS', 2_000),
     dsproofWaitMs: num('DSPROOF_WAIT_MS', 4_000),
+    minSwap: num('MIN_SWAP_CENTS', 25),
+    instantExposureMax: num('INSTANT_EXPOSURE_MAX_CENTS', 1_000),
+    satsReserve: BigInt(num('SATS_RESERVE', 10_000)),
     pollMs: num('POLL_MS', 2_500),
     tokenCategory: env('TOKEN_CATEGORY', '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544'),
     publicName: env('SOLVER_NAME', 'Chirograph solver #1'),

@@ -141,16 +141,28 @@ to confirm.
 | Relayer goes offline mid-swap | Claims and refunds on BCH need no key; EVM claims and refunds are public functions. The browser can claim directly. |
 | Solver lies about a lock | The browser checks every lock on-chain against what it asked for (address, amount, hash, timeout) and keeps the secret if anything differs. |
 | Someone sends dust or junk to a lock address | Ignored: only the expected outpoint, token and amount count. |
-| Retry or crash in the solver | Second-leg parameters are fixed and persisted before the first send; the exact signed transaction is re-sent, and identical EVM parameters give an identical lock id the contract refuses to open twice. |
+| Retry or crash in the solver | Second-leg parameters are fixed and persisted before the first send; the exact signed transaction is re-sent, and identical EVM parameters give an identical lock id the contract refuses to open twice. Every (re)broadcast first re-checks that the user's lock is still open and that enough time is left. |
+| A relayed user lock reverts | The solver reads the escrow: if the lock exists anyway it proceeds, otherwise the swap fails cleanly and frees its reserved inventory. |
+| Someone opens many tiny swaps | A minimum swap size, a per-address rate limit, atomic inventory reservation, and a BCH fee reserve below which capacity drops to zero. |
 
 ## Honest limits
 
 - **One solver today.** The reference solver is the only liquidity, and it holds a few dollars on purpose.
   The RFQ API is open, so anyone can run another, but nobody else does yet.
-- **0-conf is a priced risk, not a guarantee.** It is capped and the cap is visible in `/v1/info`.
-- **The relayer sees the secret before the chain does** for PUSD → USDC (it submits the claim). That is
-  safe: the claim pays the user no matter who submits it, and the solver can only use the secret on its
-  own lock, which it is entitled to.
+- **0-conf is a priced risk, not a guarantee.** The solver fills unconfirmed locks only in the instant
+  tier, only when every input is P2PKH (double-spend proofs cannot cover anything else), only when the
+  proof server answered, one swap per lock transaction, and under a cap on total unconfirmed exposure.
+  The user side mirrors it: above a threshold, or without a proof answer, the browser waits for a
+  confirmation before claiming.
+- **Timing margins assume median time past trails by about an hour.** It can trail by less; the margins
+  are sized so that even a 20-minute lag leaves the counterparty more than an hour to reuse the secret.
+- **The quote is checked, not trusted.** The app pins the maximum fee and the escrow, USDC and token
+  addresses; a quote or solver that disagrees is rejected before anything is signed.
+- **The relayer sees the secret before the chain does** for PUSD → USDC (it submits the claim). The claim
+  pays the user no matter who submits it, but a dishonest relayer could sit on it. The browser therefore
+  only reveals while the solver's USDC lock has at least 45 minutes left, then watches the escrow itself
+  and claims with the user's own wallet if the relayer has not within 30 seconds. Once the secret is out
+  the solver never refunds that lock; it claims it for the user.
 - **Free option.** A user can sign, wait, and reveal only if prices moved in their favour. For a
   stablecoin pair the option is worth little, and the solver's timeout limits it to an hour.
 - **WizardConnect has no message signing**, so there is no "sign in with wallet"; the wallet's derived

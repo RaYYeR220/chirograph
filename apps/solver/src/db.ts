@@ -48,6 +48,14 @@ export class SwapStore {
     return rows.map((r) => JSON.parse(r.doc) as SwapRecord);
   }
 
+  /** Any swap (open or closed) that already used this BCH lock transaction. */
+  byLockTxid(txid: string): SwapRecord | undefined {
+    const row = this.db
+      .prepare(`SELECT doc FROM swaps WHERE json_extract(doc, '$.bch.lockTxid') = ? LIMIT 1`)
+      .get(txid) as { doc: string } | undefined;
+    return row ? (JSON.parse(row.doc) as SwapRecord) : undefined;
+  }
+
   stats() {
     return this.db
       .prepare(`SELECT status, COUNT(*) AS n FROM swaps GROUP BY status`)

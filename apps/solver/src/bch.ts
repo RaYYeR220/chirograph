@@ -1,5 +1,5 @@
 import { ElectrumNetworkProvider, SignatureTemplate, type SpendableUtxo } from 'cashscript';
-import { binToHex, decodeTransaction, hash160, hexToBin, sha256, swapEndianness } from '@bitauth/libauth';
+import { binToHex, decodeAuthenticationInstructions, decodeTransaction, hash160, hexToBin, sha256, swapEndianness } from '@bitauth/libauth';
 import {
   addressToBytecode, buildKeylessSpend, buildSignedLockTx, bytecodeToAddress, extractSecret, makeLockContract,
   pickLockUtxo, type BchLockParams, type LockContract, type LockExpectation,
@@ -106,15 +106,33 @@ export class BchSide {
     return tx.confirmations ?? 0;
   }
 
-  /** True if any node reported a double-spend proof for this transaction. */
-  async hasDoubleSpendProof(txid: string): Promise<boolean> {
+  /**
+   * Double-spend-proof status of an unconfirmed transaction: 'proof' if a node reported one,
+   * 'none' if the server answered without one, 'unknown' if it could not answer. Callers that
+   * take 0-conf risk must treat 'unknown' as unsafe.
+   */
+  async doubleSpendProof(txid: string): Promise<'proof' | 'none' | 'unknown'> {
     try {
       const proof = await this.provider.performRequest('blockchain.transaction.dsproof.get', txid);
-      return proof !== null && proof !== undefined;
+      return proof === null || proof === undefined ? 'none' : 'proof';
     } catch {
-      // Servers without DSProof support: report "no proof seen"; the confirmation tier still applies.
-      return false;
+      return 'unknown';
     }
+  }
+
+  /**
+   * Double-spend proofs only cover P2PKH inputs. A transaction funded from anything else could be
+   * double-spent without a proof ever appearing, so it does not qualify for 0-conf.
+   */
+  async inputsAreP2pkh(txid: string): Promise<boolean> {
+    const tx = decodeTransaction(hexToBin(await this.provider.getRawTransaction(txid)));
+    if (typeof tx === 'string') return false;
+    return tx.inputs.every((input) => {
+      const pushes = decodeAuthenticationInstructions(input.unlockingBytecode);
+      if (pushes.length !== 2) return false;
+      const [sig, pub] = pushes.map((i) => (i as { data?: Uint8Array }).data);
+      return !!sig && !!pub && (sig.length === 65 || (sig.length >= 70 && sig.length <= 73)) && pub.length === 33;
+    });
   }
 
   /** Find the transaction that spent a lock and pull the secret out of it, if it was a claim. */

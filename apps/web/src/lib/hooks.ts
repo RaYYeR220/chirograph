@@ -3,7 +3,8 @@ import { useWizardConnect } from '@wizardconnect/react';
 import type { Address, Hex } from 'viem';
 import type { Direction, EvmChainKey, Quote, SolverInfo, SwapRecord } from '@chirograph/sdk';
 import { scanWallet, type WalletSnapshot } from './bchWallet';
-import { claimSwapIn, revealSwapOut, solver, startSwapIn, startSwapOut, storedSwap, storedSwaps } from './swaps';
+import { LockState } from '@chirograph/sdk';
+import { checkQuote, claimEvmDirect, claimSwapIn, evmLockState, revealSwapOut, solver, startSwapIn, startSwapOut, storedSwap, storedSwaps } from './swaps';
 
 export function useSolverInfo(pollMs = 15_000) {
   const [info, setInfo] = useState<SolverInfo | null>(null);
@@ -53,7 +54,7 @@ export function useSwapRecord(id: string | null) {
   return swap;
 }
 
-export type RunnerStage = 'idle' | 'signing' | 'waiting_solver' | 'claiming' | 'done' | 'refunding' | 'error';
+export type RunnerStage = 'idle' | 'signing' | 'waiting_solver' | 'claiming' | 'claim_yourself' | 'done' | 'refunding' | 'error';
 
 /**
  * Drives one swap from the user's side: start it (one signature), then act automatically when the
@@ -64,11 +65,16 @@ export function useSwapRunner(deps: {
   bch: ReturnType<typeof useBch>;
   evmAddress?: Address;
   signTypedData: (typed: Parameters<Parameters<typeof startSwapIn>[0]['signTypedData']>[0]) => Promise<Hex>;
+  /** Show the quote (amount out, fee) and let the user accept it before anything is signed. */
+  confirmQuote?: (quote: Quote) => Promise<boolean>;
+  /** Send the user's own EVM claim if the relayer does not (they pay gas). */
+  writeClaim?: Parameters<typeof claimEvmDirect>[2];
 }) {
   const [id, setId] = useState<string | null>(() => storedSwaps()[0]?.id ?? null);
   const [stage, setStage] = useState<RunnerStage>('idle');
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const swap = useSwapRecord(id);
   const acting = useRef(false);
   /** Swaps whose claim/reveal already succeeded in this tab: never act twice. */
@@ -83,6 +89,8 @@ export function useSwapRunner(deps: {
     setStarted(Date.now());
     try {
       const quote: Quote = await solver.quote({ direction, chain, amount });
+      checkQuote(quote, { direction, chain, amount });
+      if (deps.confirmQuote && !(await deps.confirmQuote(quote))) { setStage('idle'); return; }
       if (direction === 'in') {
         const target = bch.wallet?.receive.tokenAddress;
         if (!target) throw new Error('connect a Bitcoin Cash wallet to receive PUSD');
@@ -114,14 +122,42 @@ export function useSwapRunner(deps: {
     setStage('claiming');
     void bch; void evmAddress;
     const run = local.direction === 'in'
-      ? claimSwapIn(swap)
-      : revealSwapOut(swap, info);
+      ? claimSwapIn(swap, setNote)
+      : revealSwapOut(swap, info).then(() => watchUntilPaid(swap.id));
     run
       .then(() => { handled.current.add(swap.id); })
       .catch((e: Error) => { setStage('error'); setError(e.message); })
       .finally(() => { acting.current = false; });
   }, [swap, deps]);
 
-  const reset = useCallback(() => { setId(null); setStage('idle'); setError(null); setStarted(null); }, []);
-  return { id, swap, stage, error, start, reset, started };
+  /**
+   * After the secret leaves this browser we trust only the chain: poll the escrow until our USDC
+   * lock is Claimed. If the relayer has not claimed within 30 s, claim it ourselves.
+   */
+  const watchUntilPaid = useCallback(async (swapId: string) => {
+    const { info } = deps;
+    if (!info) return;
+    const start = Date.now();
+    let triedDirect = false;
+    for (;;) {
+      const s = await solver.swap(swapId).catch(() => null);
+      if (!s) { await new Promise((r) => setTimeout(r, 3_000)); continue; }
+      const state = await evmLockState(s, info).catch(() => null);
+      if (state === LockState.Claimed) return;
+      if (state === LockState.Open && !triedDirect && Date.now() - start > 30_000) {
+        triedDirect = true;
+        if (deps.writeClaim) {
+          setNote('the relayer has not claimed yet; claiming with your wallet');
+          await claimEvmDirect(s, info, deps.writeClaim).catch((e: Error) => setError(e.message));
+        } else {
+          setStage('claim_yourself');
+          return;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 3_000));
+    }
+  }, [deps]);
+
+  const reset = useCallback(() => { setId(null); setStage('idle'); setError(null); setStarted(null); setNote(null); }, []);
+  return { id, swap, stage, error, note, start, reset, started };
 }

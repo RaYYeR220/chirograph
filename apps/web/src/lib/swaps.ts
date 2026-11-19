@@ -14,6 +14,8 @@ export const solver = new SolverClient(CONFIG.solverUrl);
 const now = () => Math.floor(Date.now() / 1000);
 /** Minimum time left on the counterparty's lock before we reveal the secret. */
 const CLAIM_SAFETY_SECONDS = 15 * 60;
+/** We only hand the secret to the relayer if the solver's USDC lock has at least this long left. */
+const REVEAL_MIN_SECONDS = 45 * 60;
 /** The counterparty's lock must expire at least this long before ours. */
 const MIN_TIMEOUT_GAP_SECONDS = 60 * 60;
 /** How long the browser watches an unconfirmed solver lock for a double-spend proof before claiming. */
@@ -41,6 +43,18 @@ export function trustedCategory(info: SolverInfo): string {
   return TRUST.tokenCategory;
 }
 
+/**
+ * A quote is only a proposal. Before anything is signed it must match what the user asked for,
+ * not be stale, and not charge more than the fee schedule pinned in this app.
+ */
+export function checkQuote(quote: Quote, want: { direction: 'in' | 'out'; chain: string; amount: number }) {
+  if (quote.direction !== want.direction || quote.chain !== want.chain) throw new Error('quote is for a different swap');
+  if (quote.amountIn !== want.amount) throw new Error('quote amount differs from what you entered');
+  const maxFee = Math.max(TRUST.minFee, Math.ceil((want.amount * TRUST.feeBps) / 10_000));
+  if (quote.amountOut < want.amount - maxFee) throw new Error('quote charges more than this app allows');
+  if (quote.expiresAt < now() + 30) throw new Error('quote expired; ask again');
+}
+
 // ------------------------------------------------------------------ local secret vault
 
 /**
@@ -55,6 +69,8 @@ export interface StoredSwap {
   amountIn: number; amountOut: number;
   /** This browser's own lock timeout (unix seconds). The solver's lock must expire well before it. */
   ownRefundTime: number;
+  /** Set once the secret left this browser; from then on we watch the chain until we are paid. */
+  revealedAt?: number;
 }
 const KEY = 'chirograph:swaps';
 
@@ -63,6 +79,10 @@ export function storedSwaps(): StoredSwap[] {
 }
 function storeSwap(s: StoredSwap) {
   try { localStorage.setItem(KEY, JSON.stringify([s, ...storedSwaps().filter((x) => x.id !== s.id)].slice(0, 50))); } catch { /* private mode */ }
+}
+function markRevealed(id: string) {
+  const s = storedSwap(id);
+  if (s && !s.revealedAt) storeSwap({ ...s, revealedAt: now() });
 }
 export function storedSwap(id: string): StoredSwap | undefined {
   return storedSwaps().find((x) => x.id === id);
@@ -113,7 +133,7 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
  * lock really pays our address with the quoted amount; otherwise we keep the secret and wait for
  * the automatic refund.
  */
-export async function claimSwapIn(swap: SwapRecord): Promise<string> {
+export async function claimSwapIn(swap: SwapRecord, onWait?: (msg: string) => void): Promise<string> {
   const category = TRUST.tokenCategory;
   const local = storedSwap(swap.id);
   const secret = secretFor(swap.id);
@@ -144,11 +164,30 @@ export async function claimSwapIn(swap: SwapRecord): Promise<string> {
   const utxo = await waitForUtxo(() => findLockUtxo(contract, {
     category, amount: BigInt(local.amountOut), minSats: 1_000n,
   }));
-  // The lock may still be unconfirmed. Give the network a short window to surface a double-spend
-  // proof against it before we reveal the secret; if one shows up, keep the secret and wait for refund.
-  await new Promise((r) => setTimeout(r, DSPROOF_WINDOW_MS));
-  const proof = await p.performRequest('blockchain.transaction.dsproof.get', utxo.txid).catch(() => null);
-  if (proof) throw new Error('a double-spend was attempted against the solver lock; not revealing');
+  // The lock may still be unconfirmed. Small amounts: watch it for a double-spend proof before we
+  // reveal the secret. Larger amounts, or a server that cannot answer about proofs: wait for one
+  // confirmation instead. A proof means we keep the secret and wait for the refund.
+  const confirmations = async () => {
+    const tx = await p.performRequest('blockchain.transaction.get', utxo.txid, true).catch(() => ({})) as { confirmations?: number };
+    return tx.confirmations ?? 0;
+  };
+  if ((await confirmations()) < 1) {
+    await new Promise((r) => setTimeout(r, DSPROOF_WINDOW_MS));
+    let proof: 'proof' | 'none' | 'unknown';
+    try {
+      proof = (await p.performRequest('blockchain.transaction.dsproof.get', utxo.txid)) ? 'proof' : 'none';
+    } catch {
+      proof = 'unknown';
+    }
+    if (proof === 'proof') throw new Error('a double-spend was attempted against the solver lock; not revealing');
+    if (proof === 'unknown' || local.amountOut > TRUST.userInstantMax) {
+      onWait?.('waiting for one Bitcoin Cash confirmation of the solver lock');
+      while ((await confirmations()) < 1) {
+        if (swap.bch.refundTime - now() < CLAIM_SAFETY_SECONDS) throw new Error('the solver lock did not confirm in time; your USDC will be refunded');
+        await new Promise((r) => setTimeout(r, 10_000));
+      }
+    }
+  }
   const hex = buildKeylessSpend({ provider: p, contract, utxo, params, path: 'claim', secret }).build();
   const txid = await p.sendRawTransaction(hex);
   await solver.claimed(swap.id, txid).catch(() => undefined);
@@ -209,7 +248,18 @@ export async function revealSwapOut(swap: SwapRecord, info: SolverInfo): Promise
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
   await checkSolverEvmLock(swap, info, secret);
+  markRevealed(swap.id);
   return solver.reveal(swap.id, binToHex(secret));
+}
+
+/** The on-chain state of the solver's USDC lock, read directly from the escrow (not from the solver). */
+export async function evmLockState(swap: SwapRecord, info: SolverInfo): Promise<LockState> {
+  const local = storedSwap(swap.id);
+  const chain = trustedChain(info, local?.chain ?? swap.chain);
+  const [, , , , , state] = await publicClient(chain.chainId).readContract({
+    address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
+  });
+  return state as LockState;
 }
 
 /**
@@ -217,7 +267,9 @@ export async function revealSwapOut(swap: SwapRecord, info: SolverInfo): Promise
  * browser chose: the solver's USDC lock pays OUR address at least the quoted amount, under the hash
  * of OUR secret, is still open, and expires well before our own PUSD lock.
  */
-export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, secret: Uint8Array): Promise<SolverChain> {
+export async function checkSolverEvmLock(
+  swap: SwapRecord, info: SolverInfo, secret: Uint8Array, opts: { afterReveal?: boolean } = {},
+): Promise<SolverChain> {
   const local = storedSwap(swap.id);
   if (!local || local.direction !== 'out') throw new Error('this browser does not hold this swap');
   const chain = trustedChain(info, local.chain);
@@ -228,8 +280,8 @@ export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, sec
   if (recipient.toLowerCase() !== local.evmTarget.toLowerCase()) throw new Error('the solver lock does not pay your address; not revealing');
   if (amount < BigInt(local.amountOut) * 10_000n) throw new Error('the solver locked less than you were quoted; not revealing');
   if (secretHash.toLowerCase() !== to0x(hashSecret(secret)).toLowerCase()) throw new Error('the solver lock uses a different hash; not revealing');
-  if (Number(refundTime) - now() < CLAIM_SAFETY_SECONDS) throw new Error('too close to the solver refund time; not revealing');
-  if (local.ownRefundTime - Number(refundTime) < MIN_TIMEOUT_GAP_SECONDS) throw new Error('solver timeout is not well before ours; not revealing');
+  if (!opts.afterReveal && Number(refundTime) - now() < REVEAL_MIN_SECONDS) throw new Error('too close to the solver refund time; not revealing');
+  if (!opts.afterReveal && local.ownRefundTime - Number(refundTime) < MIN_TIMEOUT_GAP_SECONDS) throw new Error('solver timeout is not well before ours; not revealing');
   return chain;
 }
 
@@ -243,7 +295,8 @@ export async function claimEvmDirect(
 ): Promise<Hex> {
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
-  const chain = await checkSolverEvmLock(swap, info, secret);
+  // Once the secret is out, claiming is always right while the lock is open: no time floor here.
+  const chain = await checkSolverEvmLock(swap, info, secret, { afterReveal: true });
   return write({ address: chain.htlc, abi: htlcAbi, functionName: 'claim', args: [swap.evm.lockId as Hex, to0x(secret)], chainId: chain.chainId });
 }
 

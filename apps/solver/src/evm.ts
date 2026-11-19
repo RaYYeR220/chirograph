@@ -36,6 +36,14 @@ export class EvmSide {
   /** First block to scan for escrow events (set HTLC_DEPLOY_BLOCK per chain to keep log queries cheap). */
   get deployBlock(): bigint { return BigInt(this.chain.deployBlock ?? 0); }
 
+  /** 'success' / 'reverted' once mined, 'pending' while the node knows it, 'unknown' if it was dropped. */
+  async receiptStatus(hash: Hex): Promise<'success' | 'reverted' | 'pending' | 'unknown'> {
+    const receipt = await this.pub.getTransactionReceipt({ hash }).catch(() => undefined);
+    if (receipt) return receipt.status === 'success' ? 'success' : 'reverted';
+    const tx = await this.pub.getTransaction({ hash }).catch(() => undefined);
+    return tx ? 'pending' : 'unknown';
+  }
+
   /** True while a transaction is known to the node but not yet mined. */
   async txPending(hash: Hex): Promise<boolean> {
     const receipt = await this.pub.getTransactionReceipt({ hash }).catch(() => undefined);

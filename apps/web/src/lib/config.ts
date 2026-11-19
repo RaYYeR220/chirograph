@@ -33,6 +33,11 @@ export const BCH_ADDRESS_URL = (address: string) =>
  * USDC address or token category that does not match these is rejected before anything is signed.
  */
 export const TRUST = {
+  /** The most this app lets a solver charge: max(minFee, ceil(amount * feeBps / 10000)) cents. */
+  feeBps: Number(env.VITE_MAX_FEE_BPS ?? 30),
+  minFee: Number(env.VITE_MIN_FEE_CENTS ?? 1),
+  /** Above this many cents, wait for one confirmation of the solver's BCH lock before claiming. */
+  userInstantMax: Number(env.VITE_USER_INSTANT_MAX_CENTS ?? 500),
   tokenCategory: ((env.VITE_TOKEN_CATEGORY as string | undefined) ?? PUSD_CATEGORY).toLowerCase(),
   chains: {
     8453: {
