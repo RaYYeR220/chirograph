@@ -41,3 +41,7 @@ variants/
 screencast/
 video/
 recon/
+
+# local operator tooling (keys, faucets, runbooks)
+ops/
+.secrets/

@@ -2,15 +2,19 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import type { OpenInSwap, OpenOutSwap, QuoteRequest, SwapRecord } from '@chirograph/sdk';
 import type { Engine } from './engine.js';
+import { UserError, publicMessage } from './errors.js';
 
 export async function buildServer(engine: Engine) {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: 64 * 1024 });
   await app.register(cors, { origin: true });
 
   // Uniform error shape; never leak stack traces.
-  app.setErrorHandler((err: { statusCode?: number; message?: string }, _req, reply) => {
-    const status = err.statusCode && err.statusCode < 500 ? err.statusCode : 400;
-    reply.status(status).send({ error: err.message ?? 'request failed' });
+  app.setErrorHandler((err: Error & { statusCode?: number; validation?: unknown }, req, reply) => {
+    if (err instanceof UserError || err.validation) {
+      return reply.status(400).send({ error: publicMessage(err) });
+    }
+    req.log.error({ err }, 'request failed');
+    return reply.status(502).send({ error: 'The solver could not complete this request. Nothing was sent; please retry.' });
   });
 
   app.get('/health', async () => ({ ok: true }));

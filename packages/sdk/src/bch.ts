@@ -138,6 +138,8 @@ export function buildWalletLockTx(opts: {
   tokenChangeAddress: string;
   feeRate?: number;
   userPrompt?: string;
+  /** PUSD -> USDC: commit the EVM payout address inside the same signed transaction. */
+  memo?: LockMemo;
 }): LockTxResult {
   const feeRate = opts.feeRate ?? 1.0;
   const lockValue = opts.bchAmount ?? LOCK_SATS;
@@ -178,6 +180,7 @@ export function buildWalletLockTx(opts: {
   if (opts.token && tokenIn > opts.token.amount) {
     builder.addOutput({ to: addressToBytecode(opts.tokenChangeAddress), amount: 1_000n, token: { category: opts.token.category, amount: tokenIn - opts.token.amount } });
   }
+  if (opts.memo) builder.addOpReturnOutput(lockMemoChunks(opts.memo));
   builder.addBchChangeOutputIfNeeded({ to: addressToBytecode(opts.changeAddress), feeRate });
 
   const wc = builder.generateWcTransactionObject({ broadcast: false, userPrompt: opts.userPrompt ?? 'Lock funds for a Chirograph swap' });
@@ -269,6 +272,35 @@ export function checkLockUtxo(utxo: Utxo, expect: { category?: string; amount?: 
     if (!utxo.token || utxo.token.category !== expect.category) return 'lock holds the wrong token';
     if (utxo.token.nft) return 'lock unexpectedly carries an NFT';
     if (expect.amount !== undefined && utxo.token.amount < expect.amount) return 'lock holds fewer tokens than quoted';
+  }
+  return undefined;
+}
+
+/**
+ * The payout binding for PUSD -> USDC swaps: an OP_RETURN in the user's own lock transaction
+ * naming the EVM chain and address that should receive the USDC. Because it sits in the
+ * transaction the user's wallet signs, nobody else can point the solver at a different payout.
+ */
+export interface LockMemo { chainId: number; evmAddress: string }
+export const LOCK_MEMO_TAG = 'CHRG';
+
+export function lockMemoChunks(memo: LockMemo): string[] {
+  const addr = memo.evmAddress.toLowerCase().replace(/^0x/, '');
+  if (!/^[0-9a-f]{40}$/.test(addr)) throw new Error('memo needs a 20-byte EVM address');
+  return [LOCK_MEMO_TAG, `0x${memo.chainId.toString(16).padStart(8, '0')}`, `0x${addr}`];
+}
+
+export function parseLockMemo(txHex: string): LockMemo | undefined {
+  const tx = decodeTransaction(hexToBin(txHex));
+  if (typeof tx === 'string') throw new Error(`cannot decode transaction: ${tx}`);
+  for (const out of tx.outputs) {
+    if (out.lockingBytecode[0] !== 0x6a) continue; // OP_RETURN
+    const parts = decodeAuthenticationInstructions(out.lockingBytecode.slice(1))
+      .map((i) => (i as { data?: Uint8Array }).data);
+    const [tag, chain, addr] = parts;
+    if (!tag || !chain || !addr || new TextDecoder().decode(tag) !== LOCK_MEMO_TAG) continue;
+    if (chain.length !== 4 || addr.length !== 20) continue;
+    return { chainId: new DataView(chain.buffer, chain.byteOffset, 4).getUint32(0), evmAddress: `0x${binToHex(addr)}` };
   }
   return undefined;
 }

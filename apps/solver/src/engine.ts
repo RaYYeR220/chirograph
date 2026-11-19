@@ -3,7 +3,7 @@ import { binToHex, hexToBin } from '@bitauth/libauth';
 import type { Address, Hex } from 'viem';
 import {
   LOCK_SATS, TIMEOUTS, USDC_UNITS_PER_PUSD_UNIT, addressToBytecode, bytecodeToAddress, computeLockId, hashSecret,
-  quoteFee, LockState,
+  quoteFee, LockState, parseLockMemo,
   type BchLockParams, type EvmChainKey, type OpenInSwap, type OpenOutSwap, type Quote, type QuoteRequest,
   type SolverInfo, type SwapRecord, type SwapStatus, type TimelineEvent,
 } from '@chirograph/sdk';
@@ -12,6 +12,7 @@ import type { SwapStore } from './db.js';
 import type { BchSide } from './bch.js';
 import type { EvmSide } from './evm.js';
 import { now } from './mutex.js';
+import { UserError, publicMessage } from './errors.js';
 
 const TERMINAL: SwapStatus[] = ['completed', 'refunded', 'failed'];
 /** Accept refund times within this slack of the nominal timeout (clock skew, slow signing). */
@@ -70,12 +71,12 @@ export class Engine {
 
   async quote(q: QuoteRequest): Promise<Quote> {
     const side = this.side(q.chain);
-    if (!Number.isInteger(q.amount) || q.amount <= 0) throw new Error('amount must be a positive number of cents');
+    if (!Number.isInteger(q.amount) || q.amount <= 0) throw new UserError('amount must be a positive number of cents');
     const info = await this.info();
     const cap = info.capacity[q.chain]![q.direction];
-    if (q.amount > cap) throw new Error(`the solver can fill at most ${cap} cents in this direction right now`);
+    if (q.amount > cap) throw new UserError(`the solver can fill at most ${cap} cents in this direction right now`);
     const fee = quoteFee(q.amount, this.cfg.feeBps, this.cfg.minFee);
-    if (fee >= q.amount) throw new Error('amount too small to cover the fee');
+    if (fee >= q.amount) throw new UserError('amount too small to cover the fee');
     return {
       direction: q.direction,
       chain: q.chain,
@@ -99,11 +100,11 @@ export class Engine {
     const side = this.side(body.chain);
     const t = now();
     const secretHash = normHash(body.secretHash);
-    if (this.store.get(secretHash)) throw new Error('a swap with this secret hash already exists');
+    if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
     const quote = await this.quote({ direction: 'in', chain: body.chain, amount: body.amount });
     checkWindow(body.evmRefundTime, t + TIMEOUTS.inEvmRefundSeconds, 'EVM refund time');
-    if (body.validBefore < t + 60 || body.validBefore > t + 3_600) throw new Error('authorization must stay valid for 1-60 minutes');
-    const userBytecode = addressToBytecode(body.userBchAddress);
+    if (body.validBefore < t + 60 || body.validBefore > t + 3_600) throw new UserError('authorization must stay valid for 1-60 minutes');
+    const userBytecode = userAddressBytecode(body.userBchAddress);
 
     const amountUsdc = BigInt(body.amount) * USDC_UNITS_PER_PUSD_UNIT;
     const evmParams = {
@@ -149,10 +150,10 @@ export class Engine {
     const side = this.side(body.chain);
     const t = now();
     const secretHash = normHash(body.secretHash);
-    if (this.store.get(secretHash)) throw new Error('a swap with this secret hash already exists');
+    if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
     const quote = await this.quote({ direction: 'out', chain: body.chain, amount: body.amount });
     checkWindow(body.bchRefundTime, t + TIMEOUTS.outBchRefundSeconds, 'BCH refund time');
-    const userBytecode = addressToBytecode(body.userBchAddress);
+    const userBytecode = userAddressBytecode(body.userBchAddress);
     const bchParams: BchLockParams = {
       secretHash: hexToBin(secretHash), claimBytecode: this.bch.bytecode, refundBytecode: userBytecode,
       refundTime: BigInt(body.bchRefundTime),
@@ -160,7 +161,12 @@ export class Engine {
     const sighting = await this.bch.sight(bchParams, {
       category: this.cfg.tokenCategory, amount: BigInt(body.amount), minSats: LOCK_SATS / 2n, txid: body.lockTxid,
     });
-    if (!sighting) throw new Error('no matching lock found at the expected address; wrong parameters or not broadcast yet');
+    if (!sighting) throw new UserError('no matching lock found at the expected address; wrong parameters or not broadcast yet');
+    // The EVM payout address must come from the lock transaction itself (signed by the lock's owner).
+    const memo = parseLockMemo(await this.bch.provider.getRawTransaction(body.lockTxid));
+    if (!memo || memo.chainId !== side.chain.chainId || memo.evmAddress.toLowerCase() !== body.userEvm.toLowerCase()) {
+      throw new UserError('the lock transaction does not commit to this EVM payout address and chain');
+    }
 
     const amountUsdc = BigInt(quote.amountOut) * USDC_UNITS_PER_PUSD_UNIT;
     const swap: SwapRecord = {
@@ -192,9 +198,9 @@ export class Engine {
   async reveal(id: string, secretHex: string): Promise<SwapRecord> {
     const swap = this.must(id);
     const secret = hexToBin(secretHex.replace(/^0x/, ''));
-    if (binToHex(hashSecret(secret)) !== swap.secretHash) throw new Error('secret does not match this swap');
-    if (swap.direction !== 'out') throw new Error('only PUSD -> USDC swaps take a reveal');
-    if (swap.status !== 'solver_locked') throw new Error(`swap is ${swap.status}, cannot reveal now`);
+    if (binToHex(hashSecret(secret)) !== swap.secretHash) throw new UserError('secret does not match this swap');
+    if (swap.direction !== 'out') throw new UserError('only PUSD -> USDC swaps take a reveal');
+    if (swap.status !== 'solver_locked') throw new UserError(`swap is ${swap.status}, cannot reveal now`);
     swap.secret = binToHex(secret);
     const side = this.side(swap.chain);
     const hash = await side.claim(swap.evm.lockId as Hex, `0x${swap.secret}`);
@@ -209,7 +215,7 @@ export class Engine {
   /** USDC -> PUSD: the browser tells us its claim txid so we don't wait for the next poll. */
   async claimed(id: string, txid: string): Promise<SwapRecord> {
     const swap = this.must(id);
-    if (swap.direction !== 'in') throw new Error('only USDC -> PUSD swaps report a BCH claim');
+    if (swap.direction !== 'in') throw new UserError('only USDC -> PUSD swaps report a BCH claim');
     if (!swap.bch.spendTxid) swap.bch.spendTxid = txid;
     this.save(swap);
     void this.advance(swap.id);
@@ -237,9 +243,9 @@ export class Engine {
     } catch (err) {
       const swap = this.store.get(id);
       if (swap) {
-        const msg = (err as Error).message ?? String(err);
+        const msg = publicMessage(err);
         const last = swap.timeline[swap.timeline.length - 1];
-        if (last?.note !== msg) this.log(swap, { event: 'Retrying after an error', note: msg.slice(0, 300) });
+        if (last?.note !== msg) this.log(swap, { event: 'Retrying after an error', note: msg });
         this.save(swap);
       }
     } finally {
@@ -265,21 +271,33 @@ export class Engine {
     }
 
     if (swap.status === 'user_locked') {
-      const refundTime = now() + TIMEOUTS.inBchRefundSeconds;
-      // BCH refunds trail wall-clock by up to ~1h (MTP), and we need time to claim USDC afterwards.
-      if (swap.evm.refundTime - refundTime < MIN_CLAIM_MARGIN + MTP_LAG) {
-        swap.status = 'refunding';
-        this.log(swap, { event: 'Too close to your refund time to lock safely; your USDC will be refunded', chain: swap.chain });
-        return this.save(swap);
+      // Fix the BCH lock's parameters exactly once and persist them before broadcasting, so a retry
+      // targets the same lock address and can never lock our PUSD twice under one secret.
+      if (!swap.bch.refundTime) {
+        const refundTime = now() + TIMEOUTS.inBchRefundSeconds;
+        // BCH refunds trail wall-clock by up to ~1h (MTP), and we need time to claim USDC afterwards.
+        if (swap.evm.refundTime - refundTime < MIN_CLAIM_MARGIN + MTP_LAG) {
+          swap.status = 'refunding';
+          this.log(swap, { event: 'Too close to your refund time to lock safely; your USDC will be refunded', chain: swap.chain });
+          return this.save(swap);
+        }
+        swap.bch.refundTime = refundTime;
+        swap.bch.lockAddress = this.bch.contract(this.bchParams(swap)).tokenAddress;
+        this.save(swap);
       }
-      swap.bch.refundTime = refundTime;
       const params = this.bchParams(swap);
-      swap.bch.lockAddress = this.bch.contract(params).tokenAddress;
-      this.save(swap);
-      const { txid } = await this.bch.lockTokens(params, BigInt(swap.bch.tokenAmount));
-      swap.bch.lockTxid = txid;
+      const history = await this.bch.lockHistory(params);
+      if (history.length === 0) {
+        if (swap.bch.lockAttemptAt && now() - swap.bch.lockAttemptAt < 60) return; // let the indexer catch up
+        swap.bch.lockAttemptAt = now();
+        this.save(swap);
+        const { txid } = await this.bch.lockTokens(params, BigInt(swap.bch.tokenAmount));
+        swap.bch.lockTxid = txid;
+      } else {
+        swap.bch.lockTxid ??= history[0];
+      }
       swap.status = 'solver_locked';
-      this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid });
+      this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: swap.bch.lockTxid });
       return this.save(swap);
     }
 
@@ -342,32 +360,48 @@ export class Engine {
         this.log(swap, { event: 'Your BCH lock is no longer on-chain; solver did not lock USDC', chain: 'bch' });
         return this.save(swap);
       }
-      const ready = swap.tier === 'instant'
-        ? Date.now() >= swap.createdAt * 1000 + this.cfg.dsproofWaitMs && !(await this.bch.hasDoubleSpendProof(sighting.utxo.txid))
-        : sighting.confirmations >= 1;
-      if (!ready) return;
-      if (swap.tier === 'instant') this.log(swap, { event: 'No double-spend proof after the safety window; filling instantly', chain: 'bch' });
-      const refundTime = now() + TIMEOUTS.outEvmRefundSeconds;
-      // We must be able to claim the user's PUSD after they reveal, before their BCH refund opens.
-      if (swap.bch.refundTime - refundTime < MIN_CLAIM_MARGIN) {
-        swap.status = 'refunding';
-        this.log(swap, { event: 'Too close to your BCH refund time to lock safely; your PUSD refunds automatically', chain: 'bch' });
-        return this.save(swap);
+      // Fix the EVM lock's parameters exactly once, before the first send. Identical parameters give an
+      // identical lock id, which the contract refuses to open twice, so a retry can never double-pay.
+      if (!swap.evm.lockId) {
+        const ready = swap.tier === 'instant'
+          ? Date.now() >= swap.createdAt * 1000 + this.cfg.dsproofWaitMs && !(await this.bch.hasDoubleSpendProof(sighting.utxo.txid))
+          : sighting.confirmations >= 1;
+        if (!ready) return;
+        if (swap.tier === 'instant') this.log(swap, { event: 'No double-spend proof after the safety window; filling instantly', chain: 'bch' });
+        const refundTime = now() + TIMEOUTS.outEvmRefundSeconds;
+        // We must be able to claim the user's PUSD after they reveal, before their BCH refund opens.
+        if (swap.bch.refundTime - refundTime < MIN_CLAIM_MARGIN) {
+          swap.status = 'refunding';
+          this.log(swap, { event: 'Too close to your BCH refund time to lock safely; your PUSD refunds automatically', chain: 'bch' });
+          return this.save(swap);
+        }
+        swap.evm.refundTime = refundTime;
+        swap.evm.lockId = computeLockId({
+          chainId: side.chain.chainId, htlc: side.chain.htlc, token: side.chain.usdc,
+          sender: side.address, recipient: swap.evm.recipient as Address, amount: BigInt(swap.evm.amount),
+          secretHash: `0x${swap.secretHash}`, refundTime: BigInt(refundTime),
+        });
+        this.save(swap);
       }
-      swap.evm.refundTime = refundTime;
-      swap.evm.lockId = computeLockId({
-        chainId: side.chain.chainId, htlc: side.chain.htlc, token: side.chain.usdc,
-        sender: side.address, recipient: swap.evm.recipient as Address, amount: BigInt(swap.evm.amount),
-        secretHash: `0x${swap.secretHash}`, refundTime: BigInt(refundTime),
-      });
-      this.save(swap);
-      const hash = await side.solverLock(
-        swap.evm.recipient as Address, BigInt(swap.evm.amount), `0x${swap.secretHash}`, BigInt(swap.evm.refundTime),
-      );
-      await side.waitFor(hash);
-      swap.evm.lockTx = hash;
+      const existing = await side.readLock(swap.evm.lockId as Hex);
+      if (existing.state === LockState.None) {
+        if (swap.evm.lockAttemptAt && now() - swap.evm.lockAttemptAt < 90) return; // a send may still be in flight
+        if (now() >= swap.evm.refundTime - MIN_CLAIM_MARGIN / 3) {
+          swap.status = 'refunding';
+          this.log(swap, { event: 'Could not lock USDC in time; your PUSD refunds automatically', chain: 'bch' });
+          return this.save(swap);
+        }
+        swap.evm.lockAttemptAt = now();
+        this.save(swap);
+        const hash = await side.solverLock(
+          swap.evm.recipient as Address, BigInt(swap.evm.amount), `0x${swap.secretHash}`, BigInt(swap.evm.refundTime),
+        );
+        swap.evm.lockTx = hash;
+        this.save(swap);
+        await side.waitFor(hash);
+      }
       swap.status = 'solver_locked';
-      this.log(swap, { event: 'Solver locked USDC for you', chain: swap.chain, txid: hash });
+      this.log(swap, { event: 'Solver locked USDC for you', chain: swap.chain, txid: swap.evm.lockTx });
       return this.save(swap);
     }
 
@@ -439,13 +473,13 @@ export class Engine {
 
   private side(chain: EvmChainKey): EvmSide {
     const side = this.evm.get(chain);
-    if (!side) throw new Error(`chain ${chain} is not served by this solver`);
+    if (!side) throw new UserError(`chain ${chain} is not served by this solver`);
     return side;
   }
 
   private must(id: string): SwapRecord {
     const swap = this.store.get(normHash(id));
-    if (!swap) throw new Error('unknown swap');
+    if (!swap) throw new UserError('unknown swap');
     return swap;
   }
 
@@ -492,12 +526,20 @@ export class Engine {
 
 function normHash(h: string): string {
   const hex = h.replace(/^0x/, '').toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(hex)) throw new Error('secret hash must be 32 bytes of hex');
+  if (!/^[0-9a-f]{64}$/.test(hex)) throw new UserError('secret hash must be 32 bytes of hex');
   return hex;
 }
 
 function checkWindow(value: number, nominal: number, what: string) {
   if (!Number.isInteger(value) || Math.abs(value - nominal) > TIMEOUT_SLACK) {
-    throw new Error(`${what} must be about ${Math.round((nominal - now()) / 3600)}h from now`);
+    throw new UserError(`${what} must be about ${Math.round((nominal - now()) / 3600)}h from now`);
+  }
+}
+
+function userAddressBytecode(address: string): Uint8Array {
+  try {
+    return addressToBytecode(address);
+  } catch {
+    throw new UserError('invalid Bitcoin Cash address');
   }
 }
