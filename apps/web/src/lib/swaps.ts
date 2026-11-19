@@ -14,6 +14,8 @@ export const solver = new SolverClient(CONFIG.solverUrl);
 const now = () => Math.floor(Date.now() / 1000);
 /** Minimum time left on the counterparty's lock before we reveal the secret. */
 const CLAIM_SAFETY_SECONDS = 15 * 60;
+/** The counterparty's lock must expire at least this long before ours. */
+const MIN_TIMEOUT_GAP_SECONDS = 60 * 60;
 
 // ------------------------------------------------------------------ local secret vault
 
@@ -24,7 +26,11 @@ const CLAIM_SAFETY_SECONDS = 15 * 60;
 export interface StoredSwap {
   id: string; secret: string; direction: 'in' | 'out'; chain: string; createdAt: number;
   /** Where THIS browser asked to be paid; checked against the solver's lock before revealing. */
-  bchTarget?: string; evmTarget?: string;
+  bchTarget: string; evmTarget: string;
+  /** The quote this browser accepted (cents). The solver's lock must pay at least amountOut. */
+  amountIn: number; amountOut: number;
+  /** This browser's own lock timeout (unix seconds). The solver's lock must expire well before it. */
+  ownRefundTime: number;
 }
 const KEY = 'chirograph:swaps';
 
@@ -59,8 +65,11 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
   const secret = generateSecret();
   const secretHash = to0x(hashSecret(secret));
   const id = secretHash.slice(2);
-  storeSwap({ id, secret: binToHex(secret), direction: 'in', chain: chain.key, createdAt: now(), bchTarget: a.bchTokenAddress, evmTarget: a.userEvm });
   const evmRefundTime = now() + TIMEOUTS.inEvmRefundSeconds;
+  storeSwap({
+    id, secret: binToHex(secret), direction: 'in', chain: chain.key, createdAt: now(),
+    bchTarget: a.bchTokenAddress, evmTarget: a.userEvm, amountIn: a.quote.amountIn, amountOut: a.quote.amountOut, ownRefundTime: evmRefundTime,
+  });
   const validBefore = now() + 20 * 60;
   const domain = await usdcDomain(publicClient(chain.chainId), chain.usdc, chain.chainId);
   const typed = lockAuthorization({
@@ -79,25 +88,35 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
  * lock really pays our address with the quoted amount; otherwise we keep the secret and wait for
  * the automatic refund.
  */
-export async function claimSwapIn(swap: SwapRecord, expectedTokenAddress: string, category: string): Promise<string> {
+export async function claimSwapIn(swap: SwapRecord, category: string): Promise<string> {
+  const local = storedSwap(swap.id);
   const secret = secretFor(swap.id);
-  if (!secret) throw new Error('this browser does not hold the secret for this swap');
+  if (!local || !secret || local.direction !== 'in') throw new Error('this browser does not hold this swap');
   const localHash = binToHex(hashSecret(secret));
-  if (swap.id !== localHash || swap.secretHash !== localHash) throw new Error('swap does not match the secret in this browser');
-  if (swap.bch.claimBytecode !== binToHex(addressToBytecode(expectedTokenAddress))) {
+  if (swap.id !== localHash) throw new Error('swap does not match the secret in this browser');
+  // Every check below uses what THIS browser asked for, never the solver's copy of the swap.
+  if (swap.bch.claimBytecode !== binToHex(addressToBytecode(local.bchTarget))) {
     throw new Error('the solver lock does not pay your address; not revealing the secret');
   }
-  // Claiming reveals the secret. Only do it while the solver cannot yet refund its lock,
-  // otherwise it could take back the PUSD and still collect our USDC with the revealed secret.
+  // Claiming reveals the secret. Only do it while the solver cannot yet refund its lock, and only if
+  // the solver's lock expires well before ours (so it cannot take the PUSD back and our USDC too).
   if (swap.bch.refundTime - now() < CLAIM_SAFETY_SECONDS) {
     throw new Error('too close to the solver refund time to claim safely; your USDC will be refunded instead');
   }
+  if (local.ownRefundTime - swap.bch.refundTime < MIN_TIMEOUT_GAP_SECONDS) {
+    throw new Error('the solver lock does not expire early enough before yours; not revealing');
+  }
   const p = await bchProvider();
-  // Rebuild the lock from OUR hash: a lock built on any other hash has a different address.
-  const params = { ...paramsOf(swap), secretHash: hexToBin(localHash) };
+  // Rebuild the lock from OUR hash and OUR address: anything else has a different lock address.
+  const params: BchLockParams = {
+    secretHash: hexToBin(localHash),
+    claimBytecode: addressToBytecode(local.bchTarget),
+    refundBytecode: hexToBin(swap.bch.refundBytecode),
+    refundTime: BigInt(swap.bch.refundTime),
+  };
   const contract = makeLockContract(params, p);
   const utxo = await waitForUtxo(() => findLockUtxo(contract, {
-    category, amount: BigInt(swap.amountOut), minSats: 1_000n, txid: swap.bch.lockTxid,
+    category, amount: BigInt(local.amountOut), minSats: 1_000n,
   }));
   const hex = buildKeylessSpend({ provider: p, contract, utxo, params, path: 'claim', secret }).build();
   const txid = await p.sendRawTransaction(hex);
@@ -123,8 +142,11 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
   const secret = generateSecret();
   const secretHash = hashSecret(secret);
   const id = binToHex(secretHash);
-  storeSwap({ id, secret: binToHex(secret), direction: 'out', chain: chain.key, createdAt: now(), bchTarget: a.wallet.receive.tokenAddress, evmTarget: a.userEvm });
   const bchRefundTime = now() + TIMEOUTS.outBchRefundSeconds;
+  storeSwap({
+    id, secret: binToHex(secret), direction: 'out', chain: chain.key, createdAt: now(),
+    bchTarget: a.wallet.receive.tokenAddress, evmTarget: a.userEvm, amountIn: a.quote.amountIn, amountOut: a.quote.amountOut, ownRefundTime: bchRefundTime,
+  });
   const params: BchLockParams = {
     secretHash,
     claimBytecode: addressToBytecode(a.quote.solver.bchTokenAddress),
@@ -151,30 +173,32 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
  * Reveal only after reading the solver's USDC lock on-chain ourselves: it must pay our address the
  * quoted amount under our hash and still be open. The relayer then claims it for us (gasless).
  */
-export async function revealSwapOut(swap: SwapRecord, info: SolverInfo, userEvm: Address): Promise<SwapRecord> {
+export async function revealSwapOut(swap: SwapRecord, info: SolverInfo): Promise<SwapRecord> {
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
-  await checkSolverEvmLock(swap, info, userEvm, secret);
+  await checkSolverEvmLock(swap, info, secret);
   return solver.reveal(swap.id, binToHex(secret));
 }
 
 /**
- * Everything we check on-chain before the secret leaves this browser: the solver's USDC lock pays
- * our address the quoted amount, under the hash of OUR secret, is still open, and cannot be
- * refunded by the solver before our claim lands.
+ * Everything we check on-chain before the secret leaves this browser, all against the values this
+ * browser chose: the solver's USDC lock pays OUR address at least the quoted amount, under the hash
+ * of OUR secret, is still open, and expires well before our own PUSD lock.
  */
-export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, userEvm: Address, secret: Uint8Array) {
-  const chain = info.chains.find((c) => c.key === swap.chain)!;
+export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, secret: Uint8Array) {
+  const local = storedSwap(swap.id);
+  if (!local || local.direction !== 'out') throw new Error('this browser does not hold this swap');
+  const chain = info.chains.find((c) => c.key === local.chain);
+  if (!chain) throw new Error('unknown chain for this swap');
   const [, recipient, amount, secretHash, refundTime, state] = await publicClient(chain.chainId).readContract({
     address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
   });
   if (state !== LockState.Open) throw new Error('the solver lock is not open');
-  if (recipient.toLowerCase() !== userEvm.toLowerCase()) throw new Error('the solver lock does not pay your address; not revealing');
-  if (amount !== BigInt(swap.amountOut) * 10_000n) throw new Error('the solver lock amount does not match the quote; not revealing');
+  if (recipient.toLowerCase() !== local.evmTarget.toLowerCase()) throw new Error('the solver lock does not pay your address; not revealing');
+  if (amount < BigInt(local.amountOut) * 10_000n) throw new Error('the solver locked less than you were quoted; not revealing');
   if (secretHash.toLowerCase() !== to0x(hashSecret(secret)).toLowerCase()) throw new Error('the solver lock uses a different hash; not revealing');
   if (Number(refundTime) - now() < CLAIM_SAFETY_SECONDS) throw new Error('too close to the solver refund time; not revealing');
-  // The solver must still be unable to refund our PUSD lock when it learns the secret.
-  if (Number(refundTime) >= swap.bch.refundTime) throw new Error('solver timeout is not shorter than ours; not revealing');
+  if (local.ownRefundTime - Number(refundTime) < MIN_TIMEOUT_GAP_SECONDS) throw new Error('solver timeout is not well before ours; not revealing');
 }
 
 /**
@@ -182,12 +206,12 @@ export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, use
  * own wallet (they pay the gas). Same checks as a relayed reveal.
  */
 export async function claimEvmDirect(
-  swap: SwapRecord, info: SolverInfo, userEvm: Address,
+  swap: SwapRecord, info: SolverInfo,
   write: (req: { address: Address; abi: typeof htlcAbi; functionName: 'claim'; args: [Hex, Hex]; chainId: number }) => Promise<Hex>,
 ): Promise<Hex> {
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
-  await checkSolverEvmLock(swap, info, userEvm, secret);
+  await checkSolverEvmLock(swap, info, secret);
   const chain = info.chains.find((c) => c.key === swap.chain)!;
   return write({ address: chain.htlc, abi: htlcAbi, functionName: 'claim', args: [swap.evm.lockId as Hex, to0x(secret)], chainId: chain.chainId });
 }

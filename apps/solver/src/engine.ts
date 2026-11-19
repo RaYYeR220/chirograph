@@ -158,9 +158,15 @@ export class Engine {
       secretHash: hexToBin(secretHash), claimBytecode: this.bch.bytecode, refundBytecode: userBytecode,
       refundTime: BigInt(body.bchRefundTime),
     };
-    const sighting = await this.bch.sight(bchParams, {
-      category: this.cfg.tokenCategory, amount: BigInt(body.amount), minSats: LOCK_SATS / 2n, txid: body.lockTxid,
-    });
+    // The user's wallet broadcast through its own server; give propagation a moment before we decide.
+    let sighting: Awaited<ReturnType<BchSide['sight']>>;
+    for (let attempt = 0; attempt < 24; attempt++) {
+      sighting = await this.bch.sight(bchParams, {
+        category: this.cfg.tokenCategory, amount: BigInt(body.amount), minSats: LOCK_SATS / 2n, txid: body.lockTxid,
+      });
+      if (sighting) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
     if (!sighting) throw new UserError('no matching lock found at the expected address; wrong parameters or not broadcast yet');
     // The EVM payout address must come from the lock transaction itself (signed by the lock's owner).
     const memo = parseLockMemo(await this.bch.provider.getRawTransaction(body.lockTxid));

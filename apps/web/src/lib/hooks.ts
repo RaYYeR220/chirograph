@@ -78,6 +78,7 @@ export function useSwapRunner(deps: {
     const { info, bch, evmAddress } = deps;
     if (!info || !evmAddress) throw new Error('connect both wallets first');
     setError(null);
+    setId(null);
     setStage('signing');
     setStarted(Date.now());
     try {
@@ -112,9 +113,9 @@ export function useSwapRunner(deps: {
     acting.current = true;
     setStage('claiming');
     void bch; void evmAddress;
-    const run = swap.direction === 'in'
-      ? claimSwapIn(swap, local.bchTarget ?? '', info.pusdCategory)
-      : revealSwapOut(swap, info, local.evmTarget as Address);
+    const run = local.direction === 'in'
+      ? claimSwapIn(swap, info.pusdCategory)
+      : revealSwapOut(swap, info);
     run
       .then(() => { handled.current.add(swap.id); })
       .catch((e: Error) => { setStage('error'); setError(e.message); })
