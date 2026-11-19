@@ -40,7 +40,7 @@ export function makeLockContract(params: BchLockParams, provider: NetworkProvide
   return new Contract(
     artifact,
     [params.secretHash, params.claimBytecode, params.refundBytecode, params.refundTime, params.maxFee ?? MAX_EXECUTOR_FEE],
-    { provider, addressType: 'p2sh32' },
+    { provider, contractType: 'p2sh32' },
   );
 }
 
@@ -76,8 +76,8 @@ export function buildKeylessSpend(opts: {
   if (opts.utxo.satoshis <= fee + 546n) throw new Error('lock UTXO too small to pay the spend fee');
   const destination = opts.path === 'claim' ? opts.params.claimBytecode : opts.params.refundBytecode;
   const unlocker = opts.path === 'claim'
-    ? opts.contract.unlock.claim(requireSecret(opts.secret))
-    : opts.contract.unlock.refund();
+    ? opts.contract.unlock['claim']!(requireSecret(opts.secret))
+    : opts.contract.unlock['refund']!();
   const builder = new TransactionBuilder({ provider: opts.provider, maximumFeeSatoshis: maxFee })
     .addInput(opts.utxo, unlocker)
     .addOutput({ to: destination, amount: opts.utxo.satoshis - fee, token: opts.utxo.token });

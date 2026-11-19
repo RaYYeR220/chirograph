@@ -25,7 +25,7 @@ function makeLock(opts: { claimTo?: Uint8Array; refundTo?: Uint8Array; maxFee?: 
   return new Contract(
     artifact,
     [SECRET_HASH, opts.claimTo ?? ALICE, opts.refundTo ?? SOLVER, REFUND_TIME, opts.maxFee ?? MAX_FEE],
-    { provider, addressType: 'p2sh32' },
+    { provider, contractType: 'p2sh32' },
   );
 }
 

@@ -12,6 +12,7 @@ export type SwapStatus =
   | 'solver_locked'        // solver's funds are locked on the destination chain
   | 'secret_revealed'      // the user claimed: secret is public, user has their funds
   | 'completed'            // solver also claimed with the secret; swap is closed
+  | 'refunding'            // timed out; refunds are executing on one or both chains
   | 'refunded'             // timed out; both sides got their money back
   | 'failed';
 
@@ -72,8 +73,8 @@ export interface SwapRecord {
   secretHash: string;
   secret?: string;
   user: { bchAddress?: string; evmAddress?: string };
-  bch: { lockAddress: string; refundTime: number; claimBytecode: string; refundBytecode: string; lockTxid?: string; spendTxid?: string };
-  evm: { htlc: string; lockId: string; refundTime: number; lockTx?: string; spendTx?: string };
+  bch: { lockAddress: string; refundTime: number; claimBytecode: string; refundBytecode: string; tokenAmount: number; lockTxid?: string; spendTxid?: string; refunded?: boolean };
+  evm: { htlc: string; lockId: string; refundTime: number; amount: string; sender: string; recipient: string; lockTx?: string; spendTx?: string; refunded?: boolean };
   createdAt: number;
   updatedAt: number;
   timeline: TimelineEvent[];
