@@ -84,7 +84,7 @@ function storeSwap(s: StoredSwap) {
 }
 function markRevealed(id: string, lockId: string) {
   const s = storedSwap(id);
-  if (s && !s.revealedAt) storeSwap({ ...s, revealedAt: now(), verifiedLockId: lockId });
+  if (s && (!s.revealedAt || !s.verifiedLockId)) storeSwap({ ...s, revealedAt: s.revealedAt ?? now(), verifiedLockId: s.verifiedLockId ?? lockId });
 }
 export function storedSwap(id: string): StoredSwap | undefined {
   return storedSwaps().find((x) => x.id === id);

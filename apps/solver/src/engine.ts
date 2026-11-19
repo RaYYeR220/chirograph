@@ -433,7 +433,12 @@ export class Engine {
       // Fix the EVM lock's parameters exactly once, before the first send. Identical parameters give an
       // identical lock id, which the contract refuses to open twice, so a retry can never double-pay.
       if (!swap.evm.lockId) {
-        // Decide and record under one lock: setting lockId is what counts this swap toward exposure.
+        // Slow network checks first, outside the lock; then decide and record under it.
+        if (sighting!.confirmations < 1 && swap.tier === 'instant') {
+          if (!(await this.bch.inputsAreP2pkh(sighting!.utxo.txid))) return;
+          if ((await this.bch.doubleSpendProof(sighting!.utxo.txid)) !== 'none') return;
+        }
+        // Setting lockId is what counts this swap toward exposure, so check and record together.
         const decided = await this.fillLock.run(async () => {
           if (!(await this.readyToFill(swap, sighting!))) return false;
           const refundTime = now() + TIMEOUTS.outEvmRefundSeconds;
@@ -554,8 +559,6 @@ export class Engine {
     if (swap.tier !== 'instant') return false;
     if (Date.now() < swap.createdAt * 1000 + this.cfg.dsproofWaitMs) return false;
     if (this.instantExposure(swap.id) + swap.amountIn > this.cfg.instantExposureMax) return false;
-    if (!(await this.bch.inputsAreP2pkh(sighting.utxo.txid))) return false;
-    if ((await this.bch.doubleSpendProof(sighting.utxo.txid)) !== 'none') return false;
     this.log(swap, { event: 'No double-spend proof after the safety window; filling instantly', chain: 'bch' });
     return true;
   }

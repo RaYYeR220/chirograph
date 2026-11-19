@@ -127,6 +127,8 @@ export class BchSide {
   async inputsAreP2pkh(txid: string): Promise<boolean> {
     const tx = decodeTransaction(hexToBin(await this.provider.getRawTransaction(txid)));
     if (typeof tx === 'string') return false;
+    // A normal wallet lock has a handful of inputs; anything bigger simply waits for a confirmation.
+    if (tx.inputs.length > 8) return false;
     for (const input of tx.inputs) {
       const pushes = decodeAuthenticationInstructions(input.unlockingBytecode);
       if (pushes.length !== 2) return false;

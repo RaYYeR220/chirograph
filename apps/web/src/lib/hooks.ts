@@ -140,6 +140,8 @@ export function useSwapRunner(deps: {
     const start = Date.now();
     let triedDirect = false;
     for (;;) {
+      const local = storedSwap(swapId);
+      if (!local?.verifiedLockId) { setStage('claim_yourself'); return; }
       const state = await evmLockState(swapId, info).catch(() => null);
       if (state === LockState.Claimed) return;
       if (state === LockState.Open && !triedDirect && Date.now() - start > 30_000) {
