@@ -127,12 +127,19 @@ export class BchSide {
   async inputsAreP2pkh(txid: string): Promise<boolean> {
     const tx = decodeTransaction(hexToBin(await this.provider.getRawTransaction(txid)));
     if (typeof tx === 'string') return false;
-    return tx.inputs.every((input) => {
+    for (const input of tx.inputs) {
       const pushes = decodeAuthenticationInstructions(input.unlockingBytecode);
       if (pushes.length !== 2) return false;
       const [sig, pub] = pushes.map((i) => (i as { data?: Uint8Array }).data);
-      return !!sig && !!pub && (sig.length === 65 || (sig.length >= 70 && sig.length <= 73)) && pub.length === 33;
-    });
+      if (!sig || !pub || pub.length !== 33 || !(sig.length === 65 || (sig.length >= 70 && sig.length <= 73))) return false;
+      // The spent output itself must be P2PKH for exactly this public key.
+      const prev = decodeTransaction(hexToBin(await this.provider.getRawTransaction(binToHex(input.outpointTransactionHash))));
+      if (typeof prev === 'string') return false;
+      const script = prev.outputs[input.outpointIndex]?.lockingBytecode;
+      const expected = `76a914${binToHex(hash160(pub))}88ac`;
+      if (!script || binToHex(script) !== expected) return false;
+    }
+    return true;
   }
 
   /** Find the transaction that spent a lock and pull the secret out of it, if it was a claim. */

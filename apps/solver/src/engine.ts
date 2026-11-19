@@ -34,6 +34,8 @@ export class Engine {
   private inventory = { tokens: 0n, sats: 0n, usdc: new Map<EvmChainKey, bigint>(), at: 0 };
   /** Capacity check and reservation happen under one lock, so concurrent opens cannot over-commit. */
   private openLock = new Mutex();
+  /** 0-conf fill decisions run one at a time, so the exposure cap cannot be raced. */
+  private fillLock = new Mutex();
 
   constructor(
     private cfg: SolverConfig,
@@ -431,21 +433,27 @@ export class Engine {
       // Fix the EVM lock's parameters exactly once, before the first send. Identical parameters give an
       // identical lock id, which the contract refuses to open twice, so a retry can never double-pay.
       if (!swap.evm.lockId) {
-        if (!(await this.readyToFill(swap, sighting!))) return;
-        const refundTime = now() + TIMEOUTS.outEvmRefundSeconds;
-        // We must be able to claim the user's PUSD after they reveal, before their BCH refund opens.
-        if (swap.bch.refundTime - refundTime < MIN_CLAIM_MARGIN) {
-          swap.status = 'refunding';
-          this.log(swap, { event: 'Too close to your BCH refund time to lock safely; your PUSD refunds automatically', chain: 'bch' });
-          return this.save(swap);
-        }
-        swap.evm.refundTime = refundTime;
-        swap.evm.lockId = computeLockId({
-          chainId: side.chain.chainId, htlc: side.chain.htlc, token: side.chain.usdc,
-          sender: side.address, recipient: swap.evm.recipient as Address, amount: BigInt(swap.evm.amount),
-          secretHash: `0x${swap.secretHash}`, refundTime: BigInt(refundTime),
+        // Decide and record under one lock: setting lockId is what counts this swap toward exposure.
+        const decided = await this.fillLock.run(async () => {
+          if (!(await this.readyToFill(swap, sighting!))) return false;
+          const refundTime = now() + TIMEOUTS.outEvmRefundSeconds;
+          // We must be able to claim the user's PUSD after they reveal, before their BCH refund opens.
+          if (swap.bch.refundTime - refundTime < MIN_CLAIM_MARGIN) {
+            swap.status = 'refunding';
+            this.log(swap, { event: 'Too close to your BCH refund time to lock safely; your PUSD refunds automatically', chain: 'bch' });
+            this.save(swap);
+            return false;
+          }
+          swap.evm.refundTime = refundTime;
+          swap.evm.lockId = computeLockId({
+            chainId: side.chain.chainId, htlc: side.chain.htlc, token: side.chain.usdc,
+            sender: side.address, recipient: swap.evm.recipient as Address, amount: BigInt(swap.evm.amount),
+            secretHash: `0x${swap.secretHash}`, refundTime: BigInt(refundTime),
+          });
+          this.save(swap);
+          return true;
         });
-        this.save(swap);
+        if (!decided) return;
       }
       const existing = await side.readLock(swap.evm.lockId as Hex);
       if (existing.state === LockState.None) {

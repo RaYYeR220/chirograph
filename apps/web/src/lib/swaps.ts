@@ -71,6 +71,8 @@ export interface StoredSwap {
   ownRefundTime: number;
   /** Set once the secret left this browser; from then on we watch the chain until we are paid. */
   revealedAt?: number;
+  /** The EVM lock this browser verified before revealing; the only lock we watch afterwards. */
+  verifiedLockId?: string;
 }
 const KEY = 'chirograph:swaps';
 
@@ -80,9 +82,9 @@ export function storedSwaps(): StoredSwap[] {
 function storeSwap(s: StoredSwap) {
   try { localStorage.setItem(KEY, JSON.stringify([s, ...storedSwaps().filter((x) => x.id !== s.id)].slice(0, 50))); } catch { /* private mode */ }
 }
-function markRevealed(id: string) {
+function markRevealed(id: string, lockId: string) {
   const s = storedSwap(id);
-  if (s && !s.revealedAt) storeSwap({ ...s, revealedAt: now() });
+  if (s && !s.revealedAt) storeSwap({ ...s, revealedAt: now(), verifiedLockId: lockId });
 }
 export function storedSwap(id: string): StoredSwap | undefined {
   return storedSwaps().find((x) => x.id === id);
@@ -248,16 +250,20 @@ export async function revealSwapOut(swap: SwapRecord, info: SolverInfo): Promise
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
   await checkSolverEvmLock(swap, info, secret);
-  markRevealed(swap.id);
+  markRevealed(swap.id, swap.evm.lockId);
   return solver.reveal(swap.id, binToHex(secret));
 }
 
-/** The on-chain state of the solver's USDC lock, read directly from the escrow (not from the solver). */
-export async function evmLockState(swap: SwapRecord, info: SolverInfo): Promise<LockState> {
-  const local = storedSwap(swap.id);
-  const chain = trustedChain(info, local?.chain ?? swap.chain);
+/**
+ * The on-chain state of the USDC lock this browser verified before revealing, read directly from the
+ * pinned escrow. Nothing the solver reports afterwards can change which lock we watch.
+ */
+export async function evmLockState(swapId: string, info: SolverInfo): Promise<LockState> {
+  const local = storedSwap(swapId);
+  if (!local?.verifiedLockId) throw new Error('no verified lock for this swap');
+  const chain = trustedChain(info, local.chain);
   const [, , , , , state] = await publicClient(chain.chainId).readContract({
-    address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
+    address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [local.verifiedLockId as Hex],
   });
   return state as LockState;
 }
@@ -296,8 +302,10 @@ export async function claimEvmDirect(
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
   // Once the secret is out, claiming is always right while the lock is open: no time floor here.
-  const chain = await checkSolverEvmLock(swap, info, secret, { afterReveal: true });
-  return write({ address: chain.htlc, abi: htlcAbi, functionName: 'claim', args: [swap.evm.lockId as Hex, to0x(secret)], chainId: chain.chainId });
+  const local = storedSwap(swap.id);
+  const lockId = (local?.verifiedLockId ?? swap.evm.lockId) as Hex;
+  const chain = await checkSolverEvmLock({ ...swap, evm: { ...swap.evm, lockId } }, info, secret, { afterReveal: true });
+  return write({ address: chain.htlc, abi: htlcAbi, functionName: 'claim', args: [lockId, to0x(secret)], chainId: chain.chainId });
 }
 
 // ------------------------------------------------------------------ refunds anyone can run

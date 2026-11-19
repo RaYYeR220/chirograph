@@ -7,8 +7,8 @@ import { UserError, publicMessage } from './errors.js';
 const OPENS_PER_MINUTE = Number(process.env.OPENS_PER_MINUTE ?? 6);
 
 export async function buildServer(engine: Engine) {
-  // Behind Caddy: trust the proxy so req.ip is the real client address.
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: 64 * 1024, trustProxy: true });
+  // Only the local reverse proxy may set X-Forwarded-For; anyone else's header is ignored.
+  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: 64 * 1024, trustProxy: '127.0.0.1' });
   await app.register(cors, { origin: true });
 
   // Uniform error shape; never leak stack traces.
@@ -26,6 +26,10 @@ export async function buildServer(engine: Engine) {
 
   // A small per-IP budget on the calls that make the solver spend gas or lock inventory.
   const opens = new Map<string, number[]>();
+  setInterval(() => {
+    const t = Date.now();
+    for (const [ip, times] of opens) if (times.every((x) => t - x > 60_000)) opens.delete(ip);
+  }, 60_000).unref();
   const limitOpens = (ip: string) => {
     const t = Date.now();
     const recent = (opens.get(ip) ?? []).filter((x) => t - x < 60_000);

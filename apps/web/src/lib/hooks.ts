@@ -140,15 +140,14 @@ export function useSwapRunner(deps: {
     const start = Date.now();
     let triedDirect = false;
     for (;;) {
-      const s = await solver.swap(swapId).catch(() => null);
-      if (!s) { await new Promise((r) => setTimeout(r, 3_000)); continue; }
-      const state = await evmLockState(s, info).catch(() => null);
+      const state = await evmLockState(swapId, info).catch(() => null);
       if (state === LockState.Claimed) return;
       if (state === LockState.Open && !triedDirect && Date.now() - start > 30_000) {
         triedDirect = true;
         if (deps.writeClaim) {
           setNote('the relayer has not claimed yet; claiming with your wallet');
-          await claimEvmDirect(s, info, deps.writeClaim).catch((e: Error) => setError(e.message));
+          const s = await solver.swap(swapId).catch(() => null);
+          if (s) await claimEvmDirect(s, info, deps.writeClaim).catch((e: Error) => setError(e.message));
         } else {
           setStage('claim_yourself');
           return;

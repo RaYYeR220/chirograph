@@ -28,7 +28,8 @@ setInterval(async () => {
   }
 }, cfg.pollMs);
 
-await app.listen({ port: cfg.port, host: '0.0.0.0' });
+// In production the solver sits behind a local reverse proxy and listens on localhost only.
+await app.listen({ port: cfg.port, host: process.env.HOST ?? '127.0.0.1' });
 app.log.info({
   bch: bch.tokenAddress,
   evm: [...evm.values()].map((s) => `${s.chain.name}:${s.address}`),
