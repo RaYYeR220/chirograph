@@ -12,6 +12,8 @@ import { publicClient } from './evm';
 
 export const solver = new SolverClient(CONFIG.solverUrl);
 const now = () => Math.floor(Date.now() / 1000);
+/** Minimum time left on the counterparty's lock before we reveal the secret. */
+const CLAIM_SAFETY_SECONDS = 15 * 60;
 
 // ------------------------------------------------------------------ local secret vault
 
@@ -73,11 +75,19 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
 export async function claimSwapIn(swap: SwapRecord, expectedTokenAddress: string, category: string): Promise<string> {
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
+  const localHash = binToHex(hashSecret(secret));
+  if (swap.id !== localHash || swap.secretHash !== localHash) throw new Error('swap does not match the secret in this browser');
   if (swap.bch.claimBytecode !== binToHex(addressToBytecode(expectedTokenAddress))) {
     throw new Error('the solver lock does not pay your address; not revealing the secret');
   }
+  // Claiming reveals the secret. Only do it while the solver cannot yet refund its lock,
+  // otherwise it could take back the PUSD and still collect our USDC with the revealed secret.
+  if (swap.bch.refundTime - now() < CLAIM_SAFETY_SECONDS) {
+    throw new Error('too close to the solver refund time to claim safely; your USDC will be refunded instead');
+  }
   const p = await bchProvider();
-  const params = paramsOf(swap);
+  // Rebuild the lock from OUR hash: a lock built on any other hash has a different address.
+  const params = { ...paramsOf(swap), secretHash: hexToBin(localHash) };
   const contract = makeLockContract(params, p);
   const utxo = await waitForUtxo(() => findLockUtxo(contract, {
     category, amount: BigInt(swap.amountOut), minSats: 1_000n, txid: swap.bch.lockTxid,
@@ -137,15 +147,42 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
 export async function revealSwapOut(swap: SwapRecord, info: SolverInfo, userEvm: Address): Promise<SwapRecord> {
   const secret = secretFor(swap.id);
   if (!secret) throw new Error('this browser does not hold the secret for this swap');
+  await checkSolverEvmLock(swap, info, userEvm, secret);
+  return solver.reveal(swap.id, binToHex(secret));
+}
+
+/**
+ * Everything we check on-chain before the secret leaves this browser: the solver's USDC lock pays
+ * our address the quoted amount, under the hash of OUR secret, is still open, and cannot be
+ * refunded by the solver before our claim lands.
+ */
+export async function checkSolverEvmLock(swap: SwapRecord, info: SolverInfo, userEvm: Address, secret: Uint8Array) {
   const chain = info.chains.find((c) => c.key === swap.chain)!;
-  const [, recipient, amount, secretHash, , state] = await publicClient(chain.chainId).readContract({
+  const [, recipient, amount, secretHash, refundTime, state] = await publicClient(chain.chainId).readContract({
     address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
   });
   if (state !== LockState.Open) throw new Error('the solver lock is not open');
   if (recipient.toLowerCase() !== userEvm.toLowerCase()) throw new Error('the solver lock does not pay your address; not revealing');
   if (amount !== BigInt(swap.amountOut) * 10_000n) throw new Error('the solver lock amount does not match the quote; not revealing');
-  if (secretHash.toLowerCase() !== `0x${swap.secretHash}`) throw new Error('hash mismatch; not revealing');
-  return solver.reveal(swap.id, binToHex(secret));
+  if (secretHash.toLowerCase() !== to0x(hashSecret(secret)).toLowerCase()) throw new Error('the solver lock uses a different hash; not revealing');
+  if (Number(refundTime) - now() < CLAIM_SAFETY_SECONDS) throw new Error('too close to the solver refund time; not revealing');
+  // The solver must still be unable to refund our PUSD lock when it learns the secret.
+  if (Number(refundTime) >= swap.bch.refundTime) throw new Error('solver timeout is not shorter than ours; not revealing');
+}
+
+/**
+ * Fallback if the relayer does not claim in time: the user claims their USDC directly with their
+ * own wallet (they pay the gas). Same checks as a relayed reveal.
+ */
+export async function claimEvmDirect(
+  swap: SwapRecord, info: SolverInfo, userEvm: Address,
+  write: (req: { address: Address; abi: typeof htlcAbi; functionName: 'claim'; args: [Hex, Hex]; chainId: number }) => Promise<Hex>,
+): Promise<Hex> {
+  const secret = secretFor(swap.id);
+  if (!secret) throw new Error('this browser does not hold the secret for this swap');
+  await checkSolverEvmLock(swap, info, userEvm, secret);
+  const chain = info.chains.find((c) => c.key === swap.chain)!;
+  return write({ address: chain.htlc, abi: htlcAbi, functionName: 'claim', args: [swap.evm.lockId as Hex, to0x(secret)], chainId: chain.chainId });
 }
 
 // ------------------------------------------------------------------ refunds anyone can run
