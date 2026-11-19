@@ -1,0 +1,26 @@
+{
+  "name": "@chirograph/bch-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "compile": "cashc src/ChirographLock.cash -o artifacts/ChirographLock.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bitauth/libauth": "3.1.0-next.8",
+    "cashscript": "0.14.0"
+  },
+  "devDependencies": {
+    "cashc": "0.14.0",
+    "typescript": "5",
+    "vitest": "5.1.1"
+  },
+  "exports": {
+    "./artifacts/*": "./artifacts/*",
+    "./package.json": "./package.json"
+  }
+}

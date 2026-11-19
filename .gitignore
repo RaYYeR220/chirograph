@@ -1,0 +1,43 @@
+# deps / builds
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+artifacts-cache/
+
+# foundry
+contracts/evm/out/
+contracts/evm/cache/
+contracts/evm/broadcast/*/31337/
+contracts/evm/lib/
+
+# env / secrets / local data
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-journal
+*.db
+keys/
+secrets/
+
+# editor / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# local working material
+*-internal/
+*-backup*
+*.bundle
+scratch/
+ui-prototypes/
+mockups/
+design-ref/
+variants/
+screencast/
+video/
+recon/

@@ -1,0 +1,62 @@
+{
+  "contractName": "ChirographLock",
+  "constructorInputs": [
+    { "name": "secretHash", "type": "bytes32" },
+    { "name": "claimBytecode", "type": "bytes" },
+    { "name": "refundBytecode", "type": "bytes" },
+    { "name": "refundTime", "type": "int" },
+    { "name": "maxFee", "type": "int" }
+  ],
+  "abi": [
+    {
+      "name": "claim",
+      "inputs": [
+        { "name": "secret", "type": "bytes" }
+      ]
+    },
+    { "name": "refund", "inputs": [] }
+  ],
+  "bytecode": "c076cd537a8876d178ce8876d378d09d76d278cf8876cc7cc67b94a269 OP_0 OP_DEFINE OP_5 OP_PICK OP_0 OP_NUMEQUAL OP_IF OP_6 OP_PICK OP_SIZE OP_NIP 20 OP_NUMEQUALVERIFY OP_SWAP OP_4 OP_ROLL OP_0 OP_INVOKE OP_4 OP_ROLL OP_SHA256 OP_EQUAL OP_NIP OP_NIP OP_NIP OP_ELSE OP_5 OP_ROLL OP_1 OP_NUMEQUALVERIFY OP_ROT OP_4 OP_ROLL OP_0 OP_INVOKE OP_ROT OP_CHECKLOCKTIMEVERIFY OP_2DROP OP_DROP OP_1 OP_ENDIF",
+  "source": "pragma cashscript ^0.14.0;\n\n// ChirographLock: one half of a cross-chain atomic swap.\n//\n// The UTXO holds tokens (or plain BCH) that can leave in exactly two ways:\n//\n//   claim(secret)  - anyone who knows the 32-byte secret behind `secretHash`\n//                    can execute it, but the coins can only go to `claimBytecode`.\n//   refund()       - after `refundTime` (unix seconds, checked against median\n//                    time past), anyone can execute it, but the coins can only go\n//                    back to `refundBytecode`.\n//\n// Neither path takes a signature. The destination, token category, token amount\n// and NFT data are all enforced by transaction introspection, so a relayer,\n// a watchtower or the user's own browser can submit the spend and none of them\n// can redirect a single token. The only thing the executor controls is the miner\n// fee, which is capped at `maxFee` satoshis taken from the BCH carried by the UTXO.\n//\n// Each input checks the output at its own index, so several locks can be settled\n// in one transaction without two inputs sharing one payout.\ncontract ChirographLock(\n    bytes32 secretHash,\n    bytes claimBytecode,\n    bytes refundBytecode,\n    int refundTime,\n    int maxFee\n) {\n    function claim(bytes secret) {\n        require(secret.length == 32, \"secret must be 32 bytes\");\n        payOut(claimBytecode, maxFee);\n        require(sha256(secret) == secretHash, \"wrong secret\");\n    }\n\n    function refund() {\n        payOut(refundBytecode, maxFee);\n        require(tx.time >= refundTime, \"refund time not reached\");\n    }\n}\n\n// Shared payout rule for both paths: the output at this input's index must be the\n// destination, carry the identical token state, and lose at most `fee` satoshis.\nfunction payOut(bytes destination, int fee) {\n    int i = this.activeInputIndex;\n    require(tx.outputs[i].lockingBytecode == destination, \"wrong destination\");\n    require(tx.outputs[i].tokenCategory == tx.inputs[i].tokenCategory, \"token category changed\");\n    require(tx.outputs[i].tokenAmount == tx.inputs[i].tokenAmount, \"token amount changed\");\n    require(tx.outputs[i].nftCommitment == tx.inputs[i].nftCommitment, \"nft commitment changed\");\n    require(tx.outputs[i].value >= tx.inputs[i].value - fee, \"fee above cap\");\n}\n",
+  "fingerprint": "86101632d484d83bc313ebbc99b719784a33b5bd8c46b10fb61e7d8bd1d17d61",
+  "debug": {
+    "bytecode": "1dc076cd537a8876d178ce8876d378d09d76d278cf8876cc7cc67b94a26900895579009c635679827701209d7c547a008a547aa88777777767557a519d7b547a008a7bb16d755168",
+    "sourceMap": "42::49:1;;::::1;28:4:32:5:0;;;;;29:16:29:22;;:::29:1;;:33::35:0;:8::64:1;30:15:30:28:0;:30::36;;:8::37:1;;31:23:31:29:0;;:16::30:1;:8::62;28:33:32:5;;;:4;34::37::0;;;;35:15:35:29;:31::37;;:8::38:1;;36:27:36:37:0;:8::66:1;34:22:37:5;;;21:0:38:1",
+    "logs": [],
+    "requires": [
+      { "ip": 18, "line": 29, "message": "secret must be 32 bytes" },
+      { "ip": 28, "line": 31, "message": "wrong secret" },
+      { "ip": 42, "line": 36, "message": "refund time not reached" }
+    ],
+    "sourceTags": "23:25:sc",
+    "functions": [
+      {
+        "id": 0,
+        "name": "payOut",
+        "inputs": [
+          { "name": "destination", "type": "bytes" },
+          { "name": "fee", "type": "int" }
+        ],
+        "bytecode": "c076cd537a8876d178ce8876d378d09d76d278cf8876cc7cc67b94a269",
+        "sourceMap": "43:12:43:33;44:23:44:24;:12::41:1;:45::56:0;;:4::79:1;45:23:45:24:0;:12::39:1;:53::54:0;:43::69:1;:4::97;46:23:46:24:0;:12::37:1;:51::52:0;:41::65:1;:4::91;47:23:47:24:0;:12::39:1;:53::54:0;:43::69:1;:4::97;48:23:48:24:0;:12::31:1;:45::46:0;:35::53:1;:56::59:0;:35:::1;:12;:4::78",
+        "logs": [],
+        "requires": [
+          { "ip": 5, "line": 44, "message": "wrong destination" },
+          { "ip": 10, "line": 45, "message": "token category changed" },
+          { "ip": 15, "line": 46, "message": "token amount changed" },
+          { "ip": 20, "line": 47, "message": "nft commitment changed" },
+          { "ip": 28, "line": 48, "message": "fee above cap" }
+        ]
+      }
+    ]
+  },
+  "compiler": {
+    "name": "cashc",
+    "version": "0.14.0",
+    "options": {
+      "enforceFunctionParameterTypes": true,
+      "enforceLocktimeGuard": true
+    }
+  },
+  "updatedAt": "2026-11-19T01:56:24.590Z"
+}

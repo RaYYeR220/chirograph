@@ -1,0 +1,49 @@
+pragma cashscript ^0.14.0;
+
+// ChirographLock: one half of a cross-chain atomic swap.
+//
+// The UTXO holds tokens (or plain BCH) that can leave in exactly two ways:
+//
+//   claim(secret)  - anyone who knows the 32-byte secret behind `secretHash`
+//                    can execute it, but the coins can only go to `claimBytecode`.
+//   refund()       - after `refundTime` (unix seconds, checked against median
+//                    time past), anyone can execute it, but the coins can only go
+//                    back to `refundBytecode`.
+//
+// Neither path takes a signature. The destination, token category, token amount
+// and NFT data are all enforced by transaction introspection, so a relayer,
+// a watchtower or the user's own browser can submit the spend and none of them
+// can redirect a single token. The only thing the executor controls is the miner
+// fee, which is capped at `maxFee` satoshis taken from the BCH carried by the UTXO.
+//
+// Each input checks the output at its own index, so several locks can be settled
+// in one transaction without two inputs sharing one payout.
+contract ChirographLock(
+    bytes32 secretHash,
+    bytes claimBytecode,
+    bytes refundBytecode,
+    int refundTime,
+    int maxFee
+) {
+    function claim(bytes secret) {
+        require(secret.length == 32, "secret must be 32 bytes");
+        payOut(claimBytecode, maxFee);
+        require(sha256(secret) == secretHash, "wrong secret");
+    }
+
+    function refund() {
+        payOut(refundBytecode, maxFee);
+        require(tx.time >= refundTime, "refund time not reached");
+    }
+}
+
+// Shared payout rule for both paths: the output at this input's index must be the
+// destination, carry the identical token state, and lose at most `fee` satoshis.
+function payOut(bytes destination, int fee) {
+    int i = this.activeInputIndex;
+    require(tx.outputs[i].lockingBytecode == destination, "wrong destination");
+    require(tx.outputs[i].tokenCategory == tx.inputs[i].tokenCategory, "token category changed");
+    require(tx.outputs[i].tokenAmount == tx.inputs[i].tokenAmount, "token amount changed");
+    require(tx.outputs[i].nftCommitment == tx.inputs[i].nftCommitment, "nft commitment changed");
+    require(tx.outputs[i].value >= tx.inputs[i].value - fee, "fee above cap");
+}
