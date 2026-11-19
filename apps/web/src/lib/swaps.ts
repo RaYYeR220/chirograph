@@ -16,6 +16,8 @@ const now = () => Math.floor(Date.now() / 1000);
 const CLAIM_SAFETY_SECONDS = 15 * 60;
 /** The counterparty's lock must expire at least this long before ours. */
 const MIN_TIMEOUT_GAP_SECONDS = 60 * 60;
+/** How long the browser watches an unconfirmed solver lock for a double-spend proof before claiming. */
+const DSPROOF_WINDOW_MS = 1_500;
 
 // ------------------------------------------------------------------ local secret vault
 
@@ -118,6 +120,11 @@ export async function claimSwapIn(swap: SwapRecord, category: string): Promise<s
   const utxo = await waitForUtxo(() => findLockUtxo(contract, {
     category, amount: BigInt(local.amountOut), minSats: 1_000n,
   }));
+  // The lock may still be unconfirmed. Give the network a short window to surface a double-spend
+  // proof against it before we reveal the secret; if one shows up, keep the secret and wait for refund.
+  await new Promise((r) => setTimeout(r, DSPROOF_WINDOW_MS));
+  const proof = await p.performRequest('blockchain.transaction.dsproof.get', utxo.txid).catch(() => null);
+  if (proof) throw new Error('a double-spend was attempted against the solver lock; not revealing');
   const hex = buildKeylessSpend({ provider: p, contract, utxo, params, path: 'claim', secret }).build();
   const txid = await p.sendRawTransaction(hex);
   await solver.claimed(swap.id, txid).catch(() => undefined);
