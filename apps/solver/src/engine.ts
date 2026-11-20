@@ -506,7 +506,7 @@ export class Engine {
         const lock = await side.readLock(swap.evm.lockId as Hex);
         if (lock.state === LockState.Claimed) {
           // The user (or anyone) claimed the USDC on-chain: the secret is public, collect the PUSD.
-          const secret = await this.claimedSecret(side, swap.evm.lockId as Hex);
+          const secret = await this.claimedSecret(side, swap.evm.lockId as Hex, swap.createdAt);
           if (secret) {
             swap.secret = secret.slice(2);
             swap.status = 'secret_revealed';
@@ -591,12 +591,25 @@ export class Engine {
 
   // ---------------------------------------------------------------- helpers
 
-  /** The secret from the Claimed event of an EVM lock, if it was claimed. */
-  private async claimedSecret(side: EvmSide, id: Hex): Promise<Hex | undefined> {
-    const logs = await side.pub.getContractEvents({
-      address: side.chain.htlc, abi: htlcAbi, eventName: 'Claimed', args: { id }, fromBlock: side.deployBlock,
-    });
-    return (logs[0] as { args?: { secret?: Hex } } | undefined)?.args?.secret;
+  /**
+   * The secret from the Claimed event of an EVM lock, if it was claimed. Only the blocks since the
+   * swap opened are searched, newest first, in chunks small enough for public RPC log limits.
+   */
+  private async claimedSecret(side: EvmSide, id: Hex, since: number): Promise<Hex | undefined> {
+    const CHUNK = 5_000n;
+    const latest = await side.pub.getBlockNumber();
+    const back = BigInt(Math.ceil((now() - since + 900) / side.blockSeconds));
+    const floor = latest - back > side.deployBlock ? latest - back : side.deployBlock;
+    for (let to = latest; to >= floor; to -= CHUNK) {
+      const from = to - CHUNK + 1n > floor ? to - CHUNK + 1n : floor;
+      const logs = await side.pub.getContractEvents({
+        address: side.chain.htlc, abi: htlcAbi, eventName: 'Claimed', args: { id }, fromBlock: from, toBlock: to,
+      });
+      const secret = (logs[0] as { args?: { secret?: Hex } } | undefined)?.args?.secret;
+      if (secret) return secret;
+      if (from === floor) break;
+    }
+    return undefined;
   }
 
   private bchParams(swap: SwapRecord): BchLockParams {
