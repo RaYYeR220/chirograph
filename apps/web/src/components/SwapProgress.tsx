@@ -66,6 +66,8 @@ export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan 
   }, [done]);
 
   const elapsed = started ? ((doneAt ?? now) - started) / 1000 : null;
+  // Funds can't arrive after the swap settled; the watcher may notice them a poll late.
+  const arrivedAt = fundsAt && started ? Math.min(fundsAt, doneAt ?? fundsAt) : null;
   const refunding = swap && (swap.status === 'refunding' || swap.status === 'refunded');
   const failed = swap?.status === 'failed';
   const steps = swap ? stepsFor(swap) : [];
@@ -88,9 +90,9 @@ export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan 
         </div>
       </div>
 
-      {fundsAt && started && (fundsAt = Math.min(fundsAt, doneAt ?? fundsAt)) ? (
+      {arrivedAt && started ? (
         <div className="notice info" style={{ marginTop: 0, marginBottom: 6, fontSize: 15 }}>
-          Your {swap?.direction === 'out' ? 'USDC' : 'PUSD'} arrived <b className="mono" style={{ color: 'var(--ink)' }}>{((fundsAt - started) / 1000).toFixed(1)} s</b> after you clicked. One signature.
+          Your {swap?.direction === 'out' ? 'USDC' : 'PUSD'} arrived <b className="mono" style={{ color: 'var(--ink)' }}>{((arrivedAt - started) / 1000).toFixed(1)} s</b> after you clicked. One signature.
         </div>
       ) : null}
       {swap ? (
