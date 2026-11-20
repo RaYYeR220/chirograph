@@ -5,6 +5,7 @@ import { startSeamField, type SeamFieldHandle } from '../components/seamField';
 import { useSolverInfo } from '../lib/hooks';
 import { BASELINE, MEASURED } from '../lib/facts';
 import { CONFIG } from '../lib/config';
+import { chainName } from '../lib/chains';
 
 export function Landing() {
   const cv = useRef<HTMLCanvasElement>(null);
@@ -42,7 +43,7 @@ export function Landing() {
               <Link className="btn ink" href="/swap">Swap USDC ↔ PUSD</Link>
               <button className="btn ghost" ref={watch} type="button">Watch a swap</button>
             </div>
-            <p className="proof">Live on <i>Base</i> · <i>Arbitrum</i> · <i>Bitcoin Cash</i>{cap !== null ? <> · solver can fill <i>${(cap / 100).toFixed(2)}</i> right now</> : null}</p>
+            <p className="proof">Live on {(info?.chains.map((c) => chainName(c.key)) ?? ['Base', 'Arbitrum']).map((n) => <span key={n}><i>{n}</i> · </span>)}<i>Bitcoin Cash</i>{cap !== null ? <> · solver can fill <i>${(cap / 100).toFixed(2)}</i> right now</> : null}</p>
           </div>
         </section>
         <div className="steps rv d2" aria-hidden="true">
