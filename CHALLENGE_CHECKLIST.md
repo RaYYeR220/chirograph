@@ -28,5 +28,5 @@
 | "multiple/any other ecosystems would be even better" | Four EVM chains, one escrow address on all of them, Sourcify-verified on each |
 | Stretch: support multiple BCH stablecoins | PUSD and MUSD, chosen per swap; both on mainnet (swaps 10 and 11) |
 | WizardConnect on the BCH side | Swap and checkout pages |
-| A standard wallet connection on the EVM side | wagmi connectors on the swap page |
+| "On the other chain side, WalletConnect is probably essential" | WalletConnect (Reown) on the swap and checkout pages, next to browser wallets and Coinbase Wallet ([`evm.ts`](apps/web/src/lib/evm.ts)) |
 | Stretch: route through THORChain | The solver rebalances inventory between BCH and Base through THORChain: [`src/rebalance.ts`](apps/solver/src/rebalance.ts) (vault deposit with memo, router `depositWithExpiry`, halt check, fee cap, status tracking) and [`scripts/rebalance.ts`](apps/solver/scripts/rebalance.ts). THORChain had Base halted on 20 Nov ([snapshot](proof/thorchain-status-2026-11-20.json)), so it refuses to send. THORChain is also the measured baseline in [README.md](README.md#mainnet-measured) |

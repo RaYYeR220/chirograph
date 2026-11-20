@@ -123,7 +123,7 @@ function as Bitcoin Cash.
 
 | Surface | Where |
 |---|---|
-| Swap app: WizardConnect for Bitcoin Cash, any EVM wallet for USDC | [/swap](https://chirograph-cash.vercel.app/swap) |
+| Swap app: WizardConnect for Bitcoin Cash; WalletConnect, browser wallets or Coinbase Wallet for USDC | [/swap](https://chirograph-cash.vercel.app/swap) |
 | Live explorer: every swap, every leg, streamed from the solver | [/explorer](https://chirograph-cash.vercel.app/explorer) |
 | "Pay with USDC" button for Bitcoin Cash merchants: the merchant receives PUSD | [/merchants](https://chirograph-cash.vercel.app/merchants), [`pay.js`](apps/web/public/pay.js) |
 | Open solver API and a reference solver anyone can run | [`apps/solver`](apps/solver), [docs/PROTOCOL.md](docs/PROTOCOL.md) |
