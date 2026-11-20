@@ -295,9 +295,17 @@ export async function checkSolverEvmLock(
   const local = storedSwap(swap.id);
   if (!local || local.direction !== 'out') throw new Error('this browser does not hold this swap');
   const chain = trustedChain(info, local.chain);
-  const [, recipient, amount, secretHash, refundTime, state] = await publicClient(chain.chainId).readContract({
+  const read = () => publicClient(chain.chainId).readContract({
     address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
   });
+  // An RPC node a block behind the solver's may not show the lock yet. Only "not there yet" is
+  // retried; anything else that doesn't match stops the swap right away.
+  let lock = await read();
+  for (let i = 0; i < 20 && lock[5] === LockState.None; i++) {
+    await new Promise((r) => setTimeout(r, 1_000));
+    lock = await read();
+  }
+  const [, recipient, amount, secretHash, refundTime, state] = lock;
   if (state !== LockState.Open) throw new Error('the solver lock is not open');
   if (recipient.toLowerCase() !== local.evmTarget.toLowerCase()) throw new Error('the solver lock does not pay your address; not revealing');
   if (amount < BigInt(local.amountOut) * 10_000n) throw new Error('the solver locked less than you were quoted; not revealing');
