@@ -167,10 +167,13 @@ Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver.
   capped at what it holds right now. The app shows the live capacity before you sign. The protocol
   doesn't care about size; the inventory does.
 - **One solver runs today.** The API and the reference solver are open, and a second solver needs no
-  permission. A solver cannot steal funds. The worst it can do is not fill, and then the user's lock
-  refunds.
-- **0-conf is a risk the solver takes, not you.** The cap and the DSProof window limit that risk; they
-  don't remove it.
+  permission. Above $5 a solver cannot take funds: the worst it can do is not fill, and then the user's
+  lock refunds.
+- **0-conf is a capped risk on both sides.** For PUSD → USDC the solver trusts your unconfirmed lock.
+  For USDC → PUSD up to $5, your browser trusts the solver's unconfirmed lock after a 1.5 s
+  double-spend-proof check, so a solver that raced a double-spend could take up to that amount. Above
+  $5, or when the server can't answer about proofs, the browser waits for one confirmation. The caps
+  and the proof windows limit the risk; they don't remove it.
 - **Rebalancing goes through THORChain, and it was halted.** [`scripts/rebalance.ts`](apps/solver/scripts/rebalance.ts)
   moves inventory between BCH and Base through THORChain's vaults and router. It checks THORChain's halt
   flags and a fee cap before it sends anything. On 20 November THORChain had Base halted, so no

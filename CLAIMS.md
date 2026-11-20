@@ -30,8 +30,10 @@ Every public statement about Chirograph, tagged by how you can check it.
 
 - **Deep liquidity.** The solver holds a couple of dollars per side, and a swap is capped at what it
   holds. The UI shows this live.
-- **That 0-conf is risk-free.** The solver takes that risk, under a per-swap cap and a total exposure
-  cap, and fills only after a DSProof window. Users never depend on 0-conf for their own safety.
+- **That 0-conf is risk-free.** For PUSD → USDC the solver takes it, under a per-swap cap and a total
+  exposure cap, after a DSProof window. For USDC → PUSD up to $5 the user's browser accepts the solver's
+  unconfirmed lock after a 1.5 s DSProof check. Above $5 it waits for a confirmation
+  ([docs/PROTOCOL.md](docs/PROTOCOL.md#fast-settlement-0-conf-with-double-spend-proofs)).
 - **Many independent solvers.** The API is open and a second solver needs no permission, but one runs
   today.
 - **A completed THORChain rebalance.** The code in [`rebalance.ts`](apps/solver/src/rebalance.ts) prices and
