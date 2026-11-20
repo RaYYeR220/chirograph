@@ -166,7 +166,7 @@ Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver.
   Base and Arbitrum, including smart-contract wallets and relayer tampering.
 - **SDK, 9 tests:** cross-chain hash vector, keyless claim lifecycle, junk-UTXO selection.
 - **End to end:** both directions through the real WizardConnect protocol on chipnet with a Base fork,
-  then eleven swaps on mainnet (PUSD and MUSD), re-checked by `pnpm verify:onchain`.
+  then twelve swaps on mainnet (PUSD and MUSD), re-checked by `pnpm verify:onchain`.
 
 ## Honest limits
 

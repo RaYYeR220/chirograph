@@ -85,7 +85,7 @@ These moved money into place before the swaps above. None of them is part of a s
 | Test wallet receives 0.60 USDC on Base | [0x16ea789d…](https://basescan.org/tx/0x16ea789d202f5127da3b83b03675fadc237cbac616d4474bdc6eb5b029c73869) |
 | Test wallet receives 25,000 sats for lock fees | [47d021f7…](https://explorer.selene.cash/tx/47d021f79b4a3792de19bd0ce55197187923ebf32566f53fca634e527bc276c2) |
 
-Eight swaps were driven by a script that acts exactly like the browser does. It uses the same SDK
+Nine swaps were driven by a script that acts exactly like the browser does. It uses the same SDK
 calls, the same on-chain checks before revealing, and the same keyless claim. Swaps 7 to 9 were made in
 the live app while filming the demo video, with a WizardConnect wallet, so they carry no script timing. The same flows were also
 run in the real app through a WizardConnect wallet, on chipnet with a Base fork. Swaps made from the live
