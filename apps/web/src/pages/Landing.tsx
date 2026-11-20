@@ -81,12 +81,12 @@ export function Landing() {
           <div className="compare">
             <div className="metric">
               <div className="k">USDC → PUSD, signature to spendable PUSD</div>
-              <div className="v">{MEASURED.inSeconds} s <small>one signature · 0.3%</small></div>
+              <div className="v">{MEASURED.inSeconds.toFixed(1)} s <small>one signature · 0.3%</small></div>
               <div className="vs">via THORChain + Cauldron: <b>~{BASELINE.inSeconds} s + a second swap</b>, {BASELINE.inSignatures} signatures, ~{BASELINE.inFeePct}% in fees</div>
             </div>
             <div className="metric">
               <div className="k">PUSD → USDC, signature to USDC in your wallet</div>
-              <div className="v">{MEASURED.outSeconds} s <small>one signature · 0.3%</small></div>
+              <div className="v">{MEASURED.outSeconds.toFixed(1)} s <small>one signature · 0.3%</small></div>
               <div className="vs">via Cauldron + THORChain: <b>~{Math.round(BASELINE.outSeconds / 60)} min</b> (waits for a BCH block), ~{BASELINE.outFeePct}% in fees</div>
             </div>
           </div>

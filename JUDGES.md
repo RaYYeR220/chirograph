@@ -11,8 +11,8 @@ transaction behind them.
 ## 2. Watch real swaps (30 s)
 
 [/explorer](https://chirograph-cash.vercel.app/explorer) streams every swap from the solver. Open any
-swap to see each leg, with links to explorers on both chains. The six swaps in [PROOF.md](PROOF.md)
-are there too.
+swap to see each leg, with links to explorers on both chains. The mainnet swaps in
+[PROOF.md](PROOF.md) are there too.
 
 ## 3. Make one yourself (2 min, from $0.25)
 

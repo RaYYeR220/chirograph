@@ -23,7 +23,7 @@ interface ProofSwap {
   id: string; direction: string; chain: 'base' | 'arbitrum';
   amountInCents: number; amountOutCents: number; secretHash: string;
   evm: { htlc: Address; lockId: Hex; lockTx: Hex; claimTx: Hex; sender: Address; recipient: Address };
-  bch: { lockTx: string; claimTx: string; tokenAmount: number };
+  bch: { lockTx: string; claimTx: string; tokenAmount: number; tokenCategory?: string };
 }
 const proofPath = fileURLToPath(new URL('../../../proof/mainnet.json', import.meta.url));
 const proof = JSON.parse(readFileSync(proofPath, 'utf8')) as { pusdCategory: string; swaps: ProofSwap[] };
@@ -68,7 +68,7 @@ async function bchLeg(s: ProofSwap, hash: string) {
   const claimTx = decodeTransaction(hexToBin(claimHex));
   if (typeof lockTx === 'string' || typeof claimTx === 'string') throw new Error('cannot decode BCH transaction');
   const vout = lockTx.outputs.findIndex((o) =>
-    o.token && binToHex(o.token.category) === proof.pusdCategory && o.token.amount === BigInt(s.bch.tokenAmount)
+    o.token && binToHex(o.token.category) === (s.bch.tokenCategory ?? proof.pusdCategory) && o.token.amount === BigInt(s.bch.tokenAmount)
     && o.lockingBytecode.length === 35 && o.lockingBytecode[0] === 0xaa && o.lockingBytecode[1] === 0x20 && o.lockingBytecode[34] === 0x87);
   const spendsLock = vout >= 0 && claimTx.inputs.some((i) => binToHex(i.outpointTransactionHash) === s.bch.lockTx && i.outpointIndex === vout);
   const secret = extractSecret(claimHex, hexToBin(hash));
@@ -80,9 +80,9 @@ function verdict(s: ProofSwap, evm: Awaited<ReturnType<typeof evmLeg>>, bch: Awa
   const checks: [string, boolean][] = [
     ['EVM lock and claim succeeded', evm.ok],
     ['EVM claim settles the same lock', !!evm.lockId && evm.lockId === evm.claimedId && evm.lockId.toLowerCase() === s.evm.lockId.toLowerCase()],
-    ['EVM amount matches', evm.amount === BigInt(s.direction === 'USDC->PUSD' ? s.amountInCents : s.amountOutCents) * 10_000n],
+    ['EVM amount matches', evm.amount === BigInt(s.direction.startsWith('USDC->') ? s.amountInCents : s.amountOutCents) * 10_000n],
     ['sha256(EVM secret) = EVM hash', !!evm.secret && binToHex(sha256.hash(hexToBin(evm.secret))) === evm.hash],
-    ['BCH lock holds PUSD in a P2SH32 covenant', bch.lockOutput],
+    [`BCH lock holds ${s.direction.replace(/USDC|->/g, '')} in a P2SH32 covenant`, bch.lockOutput],
     ['BCH claim spends that lock', bch.spendsLock],
     ['same secret on both chains', !!bch.secret && bch.secret === evm.secret],
   ];

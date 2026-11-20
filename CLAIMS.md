@@ -11,10 +11,11 @@ Every public statement about Chirograph, tagged by how you can check it.
 |---|---|---|---|
 | The escrow is live on Base and Arbitrum at `0xF8CD…D5E7`, bound to native USDC | VERIFIED-LIVE | [PROOF.md](PROOF.md#escrow-contracts), Basescan, Arbiscan | `cast call 0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7 "token()(address)" --rpc-url https://mainnet.base.org` |
 | The deployed escrow is this repository's source | VERIFIED-LIVE | Sourcify full match on [8453](https://repo.sourcify.dev/contracts/full_match/8453/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/) and [42161](https://repo.sourcify.dev/contracts/full_match/42161/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/) | `forge verify-contract … --verifier sourcify` |
-| Six mainnet swaps have completed, in both directions and on both EVM chains | VERIFIED-LIVE | [PROOF.md](PROOF.md#every-swap) (24 transactions) | `pnpm verify:onchain` |
+| Eleven mainnet swaps have completed: both directions, both EVM chains, PUSD and MUSD | VERIFIED-LIVE | [PROOF.md](PROOF.md#every-swap) (44 transactions) | `pnpm verify:onchain` |
 | In every swap, one secret opened both chains | REPRODUCIBLE | the EVM `Claimed` event and the Bitcoin Cash claim input carry the same 32 bytes | `pnpm verify:onchain` (with a negative control that must fail) |
-| USDC → PUSD reaches the wallet in a median of 3.4 s on mainnet | REPRODUCIBLE | `proof/mainnet.json`, timed by the swapping wallet | `pnpm render:proof`, or swap on the live site |
-| PUSD → USDC reaches the wallet in a median of 9.3 s on mainnet (4 s of it is the DSProof window) | REPRODUCIBLE | same | same |
+| USDC → PUSD/MUSD reaches the wallet in a median of 3.1 s on mainnet (8 timed swaps) | REPRODUCIBLE | `proof/mainnet.json`, timed by the swapping wallet | `pnpm render:proof`, or swap on the live site |
+| PUSD/MUSD → USDC reaches the wallet in a median of 9.0 s on mainnet (4 s of it is the DSProof window) | REPRODUCIBLE | same | same |
+| Both Bitcoin Cash dollars, PUSD and MUSD, swap through the same 72-byte covenant | VERIFIED-LIVE | swaps 10 and 11 in [PROOF.md](PROOF.md#every-swap); the covenant only requires the output to keep the input's token category | `pnpm verify:onchain` |
 | One signature per swap from the user | VERIFIED-LIVE | USDC side: one EIP-3009 typed-data signature, and the relayer pays the gas. PUSD side: one WizardConnect transaction | swap on the live site |
 | Fee is 0.3% with a 1¢ minimum, and the browser refuses any quote that differs | REPRODUCIBLE | `/v1/info` on the solver; `checkQuote` in [`apps/web/src/lib/swaps.ts`](apps/web/src/lib/swaps.ts) | `curl https://35-240-17-239.sslip.io/v1/info` |
 | The Bitcoin Cash lock is 72 bytes, keyless, and cannot be redirected | REPRODUCIBLE | [`ChirographLock.cash`](contracts/bch/src/ChirographLock.cash), compiled artifact | `pnpm --filter @chirograph/bch-contracts test` (20 tests) |
@@ -38,7 +39,6 @@ Every public statement about Chirograph, tagged by how you can check it.
   today.
 - **A completed THORChain rebalance.** The code in [`rebalance.ts`](apps/solver/src/rebalance.ts) prices and
   sends rebalances. It refuses to send while THORChain has Base halted, and Base was halted on 20 Nov 2026.
-- **That the six proof swaps were clicked in the browser.** They were driven by a script that makes the
-  same SDK calls and checks as the app. The app itself was exercised end to end through WizardConnect
-  on chipnet with a Base fork. Swaps made on the live site show up in the explorer.
+- **That every proof swap was clicked in the browser.** Eight were driven by a script that makes the
+  same SDK calls and checks as the app; three were made in the live app while filming the demo. Swaps made on the live site show up in the explorer.
 - **An audit.** The code has adversarial tests and our own review rounds. That is not a third-party audit.

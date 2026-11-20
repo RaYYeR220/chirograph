@@ -9,9 +9,9 @@ const root = (p: string) => fileURLToPath(new URL(`../../../${p}`, import.meta.u
 const proof = JSON.parse(readFileSync(root('proof/mainnet.json'), 'utf8'));
 
 interface Swap {
-  id: string; direction: 'USDC->PUSD' | 'PUSD->USDC'; chain: 'base' | 'arbitrum'; openedAt: number;
+  id: string; direction: string; chain: 'base' | 'arbitrum'; openedAt: number;
   amountInCents: number; amountOutCents: number; feeCents: number;
-  msToFundsInWallet: number; msToSettled: number;
+  msToFundsInWallet: number | null; msToSettled: number | null;
   evm: { lockTx: string; claimTx: string }; bch: { lockTx: string; claimTx: string };
 }
 const swaps = proof.swaps as Swap[];
@@ -21,10 +21,14 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 };
 const sec = (ms: number) => Math.round(ms / 100) / 10;
-const ins = swaps.filter((s) => s.direction === 'USDC->PUSD');
-const outs = swaps.filter((s) => s.direction === 'PUSD->USDC');
+/** Seconds as text, always with one decimal (9.0, not 9). */
+const secText = (ms: number) => sec(ms).toFixed(1);
+// Medians use only swaps timed by the script; swaps made while filming the demo carry no timing.
+const timed = swaps.filter((s) => s.msToFundsInWallet !== null && s.msToSettled !== null) as (Swap & { msToFundsInWallet: number; msToSettled: number })[];
+const ins = timed.filter((s) => s.direction.startsWith('USDC->'));
+const outs = timed.filter((s) => s.direction.endsWith('->USDC'));
 const measured = {
-  source: `Median of ${swaps.length} mainnet swaps on Base and Arbitrum, timed by the swapping wallet`,
+  source: `Median of ${timed.length} timed mainnet swaps on Base and Arbitrum, measured by the swapping wallet`,
   swaps: swaps.length,
   inSeconds: sec(median(ins.map((s) => s.msToFundsInWallet))),
   inBest: sec(Math.min(...ins.map((s) => s.msToFundsInWallet))),
@@ -45,17 +49,17 @@ const when = (t: number) => new Date(t * 1000).toISOString().slice(0, 16).replac
 const summary = [
   '| Direction | Median time to funds | Best | Fully settled (median) | Signatures | Fee |',
   '|---|---|---|---|---|---|',
-  `| USDC → PUSD | **${measured.inSeconds} s** | ${measured.inBest} s | ${measured.inSettled} s | 1 | 0.3%, min 1¢ |`,
-  `| PUSD → USDC | **${measured.outSeconds} s** | ${measured.outBest} s | ${measured.outSettled} s | 1 | 0.3%, min 1¢ |`,
+  `| USDC → PUSD/MUSD | **${measured.inSeconds.toFixed(1)} s** | ${measured.inBest.toFixed(1)} s | ${measured.inSettled.toFixed(1)} s | 1 | 0.3%, min 1¢ |`,
+  `| PUSD/MUSD → USDC | **${measured.outSeconds.toFixed(1)} s** | ${measured.outBest.toFixed(1)} s | ${measured.outSettled.toFixed(1)} s | 1 | 0.3%, min 1¢ |`,
 ].join('\n');
 
-const legs = (s: Swap) => s.direction === 'USDC->PUSD'
+const legs = (s: Swap) => s.direction.startsWith('USDC->')
   ? `${evmTx(s.chain, s.evm.lockTx)} → ${bchTx(s.bch.lockTx)} → ${bchTx(s.bch.claimTx)} → ${evmTx(s.chain, s.evm.claimTx)}`
   : `${bchTx(s.bch.lockTx)} → ${evmTx(s.chain, s.evm.lockTx)} → ${evmTx(s.chain, s.evm.claimTx)} → ${bchTx(s.bch.claimTx)}`;
 const table = [
   '| # | When (UTC) | Swap | Chain | In → out | To funds | Settled | Transactions, in order |',
   '|---|---|---|---|---|---|---|---|',
-  ...swaps.map((s, i) => `| ${i + 1} | ${when(s.openedAt)} | ${s.direction.replace('->', ' → ')} | ${name(s.chain)} | ${usd(s.amountInCents)} → ${usd(s.amountOutCents)} | ${sec(s.msToFundsInWallet)} s | ${sec(s.msToSettled)} s | ${legs(s)} |`),
+  ...swaps.map((s, i) => `| ${i + 1} | ${when(s.openedAt)} | ${s.direction.replace('->', ' → ')} | ${name(s.chain)} | ${usd(s.amountInCents)} → ${usd(s.amountOutCents)} | ${s.msToFundsInWallet === null ? 'not timed' : `${secText(s.msToFundsInWallet)} s`} | ${s.msToSettled === null ? 'not timed' : `${secText(s.msToSettled)} s`} | ${legs(s)} |`),
 ].join('\n');
 
 function splice(file: string, tag: string, body: string) {
@@ -78,8 +82,8 @@ const setK = (k: string, v: string) => {
   if (!re.test(deck)) throw new Error(`deck: missing data-k="${k}"`);
   deck = deck.replace(re, `$1${v}$2`);
 };
-setK('in', `${measured.inSeconds} s`);
-setK('out', `${measured.outSeconds} s`);
+setK('in', `${measured.inSeconds.toFixed(1)} s`);
+setK('out', `${measured.outSeconds.toFixed(1)} s`);
 setK('src', `Chirograph: ${measured.source.toLowerCase()}. Baseline: THORChain quote API.`);
 writeFileSync(deckPath, deck);
 

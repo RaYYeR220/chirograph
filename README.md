@@ -8,8 +8,8 @@ A café in Manila takes Bitcoin Cash through Paytaca. A visitor holds USDC on Ba
 would have to sign up at an exchange or run a multi-hop route. With Chirograph they sign once, and the
 café sees PUSD a few seconds later.
 
-Chirograph swaps USDC on Base or Arbitrum for PUSD (ParyonUSD) on Bitcoin Cash, and back. Nothing is
-bridged or wrapped. The USDC stays on its chain and the PUSD stays on Bitcoin Cash. Both sides lock to the
+Chirograph swaps USDC on Base or Arbitrum for PUSD (ParyonUSD) or MUSD (MoriaUSD) on Bitcoin Cash, and
+back. Nothing is bridged or wrapped. The USDC stays on its chain and the Bitcoin Cash dollars stay on Bitcoin Cash. Both sides lock to the
 same 32-byte secret, and only your browser knows it. Revealing the secret to collect one side is exactly
 what lets the other side collect theirs. If anything stalls, both sides refund themselves.
 
@@ -23,8 +23,8 @@ what lets the other side collect theirs. If anything stalls, both sides refund t
 <!-- summary:start -->
 | Direction | Median time to funds | Best | Fully settled (median) | Signatures | Fee |
 |---|---|---|---|---|---|
-| USDC → PUSD | **3.4 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
-| PUSD → USDC | **9.3 s** | 8.2 s | 12.9 s | 1 | 0.3%, min 1¢ |
+| USDC → PUSD/MUSD | **3.1 s** | 2.3 s | 6.5 s | 1 | 0.3%, min 1¢ |
+| PUSD/MUSD → USDC | **9.0 s** | 8.2 s | 12.6 s | 1 | 0.3%, min 1¢ |
 <!-- summary:end -->
 
 Every number above comes from `proof/mainnet.json` through `pnpm render:proof`. Nothing is typed by
@@ -51,7 +51,12 @@ secret.
 | 3 | 2026-11-20 07:41 | USDC → PUSD | Base | $0.45 → $0.44 | 4.4 s | 6.7 s | [0x662497ff…](https://basescan.org/tx/0x662497ffedff9e3d5ca26381e52cbf3166ed31190a41c02b7bf2ffe8a03cd3c3) → [3ff37605…](https://explorer.selene.cash/tx/3ff376054de430566cb617e01fd0d7caaf01c94c1d2e7088f25dd22c9b8f7700) → [20030fd7…](https://explorer.selene.cash/tx/20030fd77455e5bbe311a382e435b9fc1db98d9dd7b8515e8aa822a35dff44fd) → [0x113a4c38…](https://basescan.org/tx/0x113a4c38f52c21f838c13c38305eb6c72cec27abb1bc83b2ceb9e729c8d7125a) |
 | 4 | 2026-11-20 07:41 | PUSD → USDC | Arbitrum | $0.30 → $0.29 | 10.4 s | 12.9 s | [94bdfc81…](https://explorer.selene.cash/tx/94bdfc81c8f88d43c251b948be77487828a4a9fe869c94063cc5e50c9a0147fc) → [0xf769f1e6…](https://arbiscan.io/tx/0xf769f1e6cd052b062d48b47c8c11c02d0e6f65e3a87830f85efd4cc18790c43e) → [0xac5cf924…](https://arbiscan.io/tx/0xac5cf924ecc21d707a9d0b1fa26ad060102c401751281d3c6372623effb56feb) → [a896b9f1…](https://explorer.selene.cash/tx/a896b9f13853c9ef31b7b36764af1be058b9f04167fb766c328d2a143e0258bc) |
 | 5 | 2026-11-20 07:44 | USDC → PUSD | Arbitrum | $0.28 → $0.27 | 3.4 s | 6.8 s | [0x3631b66b…](https://arbiscan.io/tx/0x3631b66bcd0e98ea555d73f71086063bbfc66f40807dfffdfe8af1bbdc120e2f) → [b0787eda…](https://explorer.selene.cash/tx/b0787eda7a9dc4da177299fa7f04e60a12df56571830187c140d7bf4f5b9ed6b) → [a0b48c9c…](https://explorer.selene.cash/tx/a0b48c9c090033df9cf11fffb9c699a133d9c5109fbc0e6b894d803d42fd29a9) → [0x689e0dd7…](https://arbiscan.io/tx/0x689e0dd7d3cb3ce574d434fe27f483541d9f746462ff9a363ea837361faa259f) |
-| 6 | 2026-11-20 07:44 | PUSD → USDC | Base | $0.27 → $0.26 | 8.2 s | 14 s | [b5a7fa30…](https://explorer.selene.cash/tx/b5a7fa30831f83408c15c22d0789fb49e3207356ffff2cf33d4fc20e5f04d3bd) → [0x928e61df…](https://basescan.org/tx/0x928e61dfe584f18b161bea22b9fae03234d466e0110b8ec3a3a8f2d257d81dd3) → [0x405aa9a1…](https://basescan.org/tx/0x405aa9a1184c0528dc31170d301aefa83e51ea59075ec2e9866f42bab32fe355) → [084b5149…](https://explorer.selene.cash/tx/084b514921a3c51a956ae166bf86086c686bc4b1285220e7ce9f06d60564b6b6) |
+| 6 | 2026-11-20 07:44 | PUSD → USDC | Base | $0.27 → $0.26 | 8.2 s | 14.0 s | [b5a7fa30…](https://explorer.selene.cash/tx/b5a7fa30831f83408c15c22d0789fb49e3207356ffff2cf33d4fc20e5f04d3bd) → [0x928e61df…](https://basescan.org/tx/0x928e61dfe584f18b161bea22b9fae03234d466e0110b8ec3a3a8f2d257d81dd3) → [0x405aa9a1…](https://basescan.org/tx/0x405aa9a1184c0528dc31170d301aefa83e51ea59075ec2e9866f42bab32fe355) → [084b5149…](https://explorer.selene.cash/tx/084b514921a3c51a956ae166bf86086c686bc4b1285220e7ce9f06d60564b6b6) |
+| 7 | 2026-11-20 08:14 | USDC → PUSD | Base | $0.35 → $0.34 | not timed | not timed | [0xbd91c97f…](https://basescan.org/tx/0xbd91c97fcc4eff027ed6adcfdaac38dd111805a4eb35e9419b3da363c1a9ae99) → [43d12ec8…](https://explorer.selene.cash/tx/43d12ec83b5febdda7453f788f0d7c9845139982a6bc0d0ed8202fb3e6cba359) → [63fa9526…](https://explorer.selene.cash/tx/63fa95263925ed11388cdd1140cf5c8a9aa1b5832ee3250e729b2296bd3cb3f1) → [0xc9dceafd…](https://basescan.org/tx/0xc9dceafdfc4730c0066fe2b06f875e7c77000eb2eaeeef86d596b4f1822f6b72) |
+| 8 | 2026-11-20 08:18 | PUSD → USDC | Base | $0.30 → $0.29 | not timed | not timed | [775210f4…](https://explorer.selene.cash/tx/775210f48a6d321ea672439d8d0ee6d180cba3e6ddd901ae05232021b4a37db2) → [0x7fd547dc…](https://basescan.org/tx/0x7fd547dce0bc6b9ecd9fdd2175363b4f209b30b75e50af222d5d4ce74affa114) → [0x01d99049…](https://basescan.org/tx/0x01d990496622f211b9ab8b75c8dbf8b1625a54847bbc9b7bdabddef9badd43ce) → [511de50a…](https://explorer.selene.cash/tx/511de50a163324301ff072566b3e171bd7afcc8e82ddfdaf103e1ced5f1c958a) |
+| 9 | 2026-11-20 08:20 | USDC → PUSD | Base | $0.30 → $0.29 | not timed | not timed | [0xea7e3c19…](https://basescan.org/tx/0xea7e3c19887da055042ac4bb3c660c917c5bdf79d01ad52f6bf7ef660dd7e959) → [c1d325d4…](https://explorer.selene.cash/tx/c1d325d49c48491ad353fc3f3811c5c1e4c690cb2c6c9e0d9a5cf18aef25b024) → [9da86d1f…](https://explorer.selene.cash/tx/9da86d1fab5d2c78e1fb4a56cadd03f8d6efe5efd9eec81a06593c98cb2c5434) → [0x5ea4922b…](https://basescan.org/tx/0x5ea4922b021223bae9b35fc10575cf5ff1528f3d30c7aa7a0761049829c60649) |
+| 10 | 2026-11-20 10:01 | USDC → MUSD | Base | $0.40 → $0.39 | 2.7 s | 5.6 s | [0x0f55e004…](https://basescan.org/tx/0x0f55e00406db3789447be530922e670c475df287bbafd1ff32c188cef6bd0936) → [777ce0a8…](https://explorer.selene.cash/tx/777ce0a8499b8f904f4e53906728cfba55a8681bed4cf95b878584b32fd5c3fc) → [e25af46d…](https://explorer.selene.cash/tx/e25af46d2e42a9b87412b03a2ecae18175343eea3acd86c6c8654ec5e377f17f) → [0xa4888af8…](https://basescan.org/tx/0xa4888af88e7c7ff6cee0ef72cd292b4bdd9756a35c6a568c6ee4860913a4cece) |
+| 11 | 2026-11-20 10:02 | MUSD → USDC | Base | $0.39 → $0.38 | 8.7 s | 11.6 s | [8b79b8ac…](https://explorer.selene.cash/tx/8b79b8ac11bf8c2e8e91d2cbfa64fa34adfa64acc1acd6490818fa74d6dfdcee) → [0x0cc0a45f…](https://basescan.org/tx/0x0cc0a45fd5ec579040f143e64b7119ff6ad8c7263fc6801ccdac874a98f964fe) → [0x0d687a37…](https://basescan.org/tx/0x0d687a370a9f1e2e6fb678d27329f9d4950be81b4a0a90d7b8250b94b75bbbd6) → [687a66a4…](https://explorer.selene.cash/tx/687a66a4e41237267eadaeb75dee9908cf696033a28041f9da889af1ef330b18) |
 <!-- swaps:end -->
 
 ![A mainnet USDC to PUSD swap: one signature, then each step on both chains with its transaction](docs/img/swap-usdc-to-pusd.jpg)
@@ -91,7 +96,7 @@ user, the solver, a watchtower) can therefore broadcast a claim or a refund, and
 Because each input checks the output at its own index, many locks can settle in one transaction.
 
 - It uses the May 2026 upgrade: the shared output check is a function compiled to `OP_DEFINE` /
-  `OP_INVOKE`. CashTokens carry PUSD (category `2469acc5…2544`). Refunds use `tx.time` against
+  `OP_INVOKE`. CashTokens carry PUSD (category `2469acc5…2544`) and MUSD (`b38a33f7…f366`); the same covenant works for any fungible CashToken. Refunds use `tx.time` against
   median time past, and the timeouts allow for its lag of about an hour.
 - Fast settlement is built on 0-conf with double-spend proofs. The solver fills an unconfirmed PUSD lock
   only after a short window in which no DSProof appears. It does this only for locks funded by plain
@@ -143,7 +148,7 @@ Solver: copy `apps/solver/.env.example` to `.env`, fill it in, then run
 |---|---|
 | `BCH_NETWORK`, `ELECTRUM_HOST` | `mainnet` or `chipnet`, and an optional Fulcrum host |
 | `BCH_WIF`, `EVM_PRIVATE_KEY` | Solver keys; one EVM key serves every chain |
-| `TOKEN_CATEGORY` | PUSD on mainnet, any fungible CashToken on chipnet |
+| `TOKEN_CATEGORY`, `MUSD_CATEGORY` | PUSD and MUSD on mainnet (set `MUSD_CATEGORY=` empty to offer PUSD only); any fungible CashTokens on chipnet |
 | `CHAINS`, `<CHAIN>_HTLC`, `<CHAIN>_DEPLOY_BLOCK`, `<CHAIN>_RPC_URL` | Which EVM chains to serve and where the escrow lives |
 | `FEE_BPS`, `MIN_FEE_CENTS` | Price: 30 bps, 1¢ minimum |
 | `INSTANT_MAX_CENTS`, `INSTANT_EXPOSURE_MAX_CENTS`, `DSPROOF_WAIT_MS` | 0-conf policy: per-swap cap, total cap, proof window |
@@ -159,7 +164,7 @@ Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver.
   Base and Arbitrum, including smart-contract wallets and relayer tampering.
 - **SDK, 9 tests:** cross-chain hash vector, keyless claim lifecycle, junk-UTXO selection.
 - **End to end:** both directions through the real WizardConnect protocol on chipnet with a Base fork,
-  then six swaps on mainnet, re-checked by `pnpm verify:onchain`.
+  then eleven swaps on mainnet (PUSD and MUSD), re-checked by `pnpm verify:onchain`.
 
 ## Honest limits
 

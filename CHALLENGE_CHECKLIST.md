@@ -4,7 +4,7 @@
 
 | Requirement | Where |
 |---|---|
-| Runs on Bitcoin Cash mainnet | Six mainnet swaps in [PROOF.md](PROOF.md); live at https://chirograph-cash.vercel.app |
+| Runs on Bitcoin Cash mainnet | Eleven mainnet swaps in [PROOF.md](PROOF.md); live at https://chirograph-cash.vercel.app |
 | Judges can make a useful BCH mainnet transaction from the live site | Both swap directions: a PUSD lock signed in your wallet, or a keyless PUSD claim broadcast by your browser ([JUDGES.md](JUDGES.md#3-make-one-yourself-2-min-from-025)) |
 | Live, clickable demo | https://chirograph-cash.vercel.app/swap |
 | WizardConnect integration | [`apps/web/src/lib/hooks.ts`](apps/web/src/lib/hooks.ts) (`useBch`), [`Wallets.tsx`](apps/web/src/components/Wallets.tsx), [`bchWallet.ts`](apps/web/src/lib/bchWallet.ts) |
@@ -25,6 +25,7 @@
 | Asked for | Where |
 |---|---|
 | USDC on another chain ↔ PUSD on BCH | Base and Arbitrum ↔ PUSD, both directions, on mainnet ([PROOF.md](PROOF.md)) |
+| Stretch: support multiple BCH stablecoins | PUSD and MUSD, chosen per swap; both on mainnet (swaps 10 and 11) |
 | WizardConnect on the BCH side | Swap and checkout pages |
 | A standard wallet connection on the EVM side | wagmi connectors on the swap page |
 | Stretch: route through THORChain | The solver rebalances inventory between BCH and Base through THORChain: [`src/rebalance.ts`](apps/solver/src/rebalance.ts) (vault deposit with memo, router `depositWithExpiry`, halt check, fee cap, status tracking) and [`scripts/rebalance.ts`](apps/solver/scripts/rebalance.ts). THORChain had Base halted on 20 Nov ([snapshot](proof/thorchain-status-2026-11-20.json)), so it refuses to send. THORChain is also the measured baseline in [README.md](README.md#mainnet-measured) |
