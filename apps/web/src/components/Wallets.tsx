@@ -6,6 +6,7 @@ import { erc20Abi } from '@chirograph/sdk';
 import type { useBch } from '../lib/hooks';
 import { publicClient } from '../lib/evm';
 import { TRUST } from '../lib/config';
+import { chainNameById } from '../lib/chains';
 
 const short = (s: string, a = 6, b = 4) => (s.length > a + b + 1 ? `${s.slice(0, a)}…${s.slice(-b)}` : s);
 const usd = (cents: bigint | number) => (Number(cents) / 100).toFixed(2);
@@ -66,7 +67,7 @@ export function EvmWalletRow({ chainId, devAddress }: { chainId: number; devAddr
       .then((b) => { if (alive) setUsdc(b); }).catch(() => { if (alive) setUsdc(null); });
     return () => { alive = false; };
   }, [who, chainId]);
-  const chainName = chainId === 42161 ? 'Arbitrum' : 'Base';
+  const chainName = chainNameById(chainId);
   return (
     <div className="wallet" style={{ flexWrap: 'wrap' }}>
       <div className="who">

@@ -8,11 +8,10 @@ import { Page } from '../components/Shell';
 import { EvmWalletRow } from '../components/Wallets';
 import { SwapProgress } from '../components/SwapProgress';
 import { useBch, useSolverInfo, useSwapRunner } from '../lib/hooks';
+import { chainIdOf, chainName } from '../lib/chains';
 
 const devKey = import.meta.env.DEV ? (import.meta.env.VITE_DEV_EVM_KEY as Hex | undefined) : undefined;
 const devAccount = devKey ? privateKeyToAccount(devKey) : undefined;
-const chainName = (key: string) => (key.startsWith('arbitrum') ? 'Arbitrum' : 'Base');
-const chainIdOf = (key: string) => (key.startsWith('arbitrum') ? 42161 : 8453);
 
 function validTarget(to: string) {
   try { addressToBytecode(to); return /^(bitcoincash|bchtest):[zr]/.test(to); } catch { return false; }

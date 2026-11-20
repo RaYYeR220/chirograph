@@ -11,6 +11,8 @@ export const CONFIG = {
   rpc: {
     8453: env.VITE_BASE_RPC as string | undefined,
     42161: env.VITE_ARBITRUM_RPC as string | undefined,
+    10: (env.VITE_OPTIMISM_RPC as string | undefined) ?? EVM_CHAINS.optimism.rpc,
+    137: (env.VITE_POLYGON_RPC as string | undefined) ?? EVM_CHAINS.polygon.rpc,
   } as Record<number, string | undefined>,
   /** BLAZE banner links. */
   deckUrl: (env.VITE_DECK_URL as string | undefined) ?? '/deck/',
@@ -52,6 +54,14 @@ export const TRUST = {
     42161: {
       usdc: ((env.VITE_USDC_42161 as string | undefined) ?? EVM_CHAINS.arbitrum.usdc).toLowerCase(),
       htlc: ((env.VITE_HTLC_42161 as string | undefined) ?? EVM_CHAINS.arbitrum.htlc ?? '').toLowerCase(),
+    },
+    10: {
+      usdc: ((env.VITE_USDC_10 as string | undefined) ?? EVM_CHAINS.optimism.usdc).toLowerCase(),
+      htlc: ((env.VITE_HTLC_10 as string | undefined) ?? EVM_CHAINS.optimism.htlc ?? '').toLowerCase(),
+    },
+    137: {
+      usdc: ((env.VITE_USDC_137 as string | undefined) ?? EVM_CHAINS.polygon.usdc).toLowerCase(),
+      htlc: ((env.VITE_HTLC_137 as string | undefined) ?? EVM_CHAINS.polygon.htlc ?? '').toLowerCase(),
     },
   } as Record<number, { usdc: string; htlc: string }>,
 };

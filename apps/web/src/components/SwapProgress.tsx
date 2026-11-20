@@ -3,13 +3,12 @@ import type { StableSymbol, SwapRecord } from '@chirograph/sdk';
 import { BCH_TX_URL } from '../lib/config';
 import { EVM_TX_URL } from '../lib/evm';
 import type { RunnerStage } from '../lib/hooks';
+import { chainIdOf, chainName } from '../lib/chains';
 
 const ORDER: Record<string, number> = {
   awaiting_user_lock: 0, user_locked: 1, solver_locked: 2, secret_revealed: 3, completed: 4,
 };
 
-function chainIdOf(key: string) { return key.startsWith('arbitrum') ? 42161 : 8453; }
-function chainName(key: string) { return key.startsWith('arbitrum') ? 'Arbitrum' : 'Base'; }
 
 interface Step { title: string; detail: string; link?: { href: string; label: string } }
 

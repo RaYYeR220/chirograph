@@ -3,13 +3,13 @@ import {
   type Address, type Hex, type PublicClient, type WalletClient, type Chain,
 } from 'viem';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
-import { base, arbitrum, baseSepolia, arbitrumSepolia } from 'viem/chains';
+import { base, arbitrum, baseSepolia, arbitrumSepolia, optimism, polygon } from 'viem/chains';
 import { htlcAbi, erc20Abi, LockState, type EvmChainKey } from '@chirograph/sdk';
 import { Mutex } from './mutex.js';
 import type { ChainRuntime, SolverConfig } from './config.js';
 
 const VIEM_CHAINS: Record<EvmChainKey, Chain> = {
-  base, arbitrum, baseSepolia, arbitrumSepolia,
+  base, arbitrum, optimism, polygon, baseSepolia, arbitrumSepolia,
   baseFork: base, arbitrumFork: arbitrum,
 };
 

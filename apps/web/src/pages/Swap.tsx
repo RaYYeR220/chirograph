@@ -10,13 +10,12 @@ import { BchWalletRow, EvmWalletRow, WizardDialog } from '../components/Wallets'
 import { SwapProgress } from '../components/SwapProgress';
 import { useBch, useSolverInfo, useSwapRunner } from '../lib/hooks';
 import { FEE } from '../lib/facts';
+import { chainIdOf, chainName } from '../lib/chains';
 
 // Development-only local signer (never present in production builds).
 const devKey = import.meta.env.DEV ? (import.meta.env.VITE_DEV_EVM_KEY as Hex | undefined) : undefined;
 const devAccount = devKey ? privateKeyToAccount(devKey) : undefined;
 
-const chainIdOf = (key: string) => (key.startsWith('arbitrum') ? 42161 : 8453);
-const chainName = (key: string) => (key.startsWith('arbitrum') ? 'Arbitrum' : 'Base');
 const bchPrefix = CONFIG.bchNetwork === 'mainnet' ? 'bitcoincash:' : 'bchtest:';
 /** A pasted Bitcoin Cash address we can pay a covenant output to, or null. */
 function validBch(a: string): string | null {

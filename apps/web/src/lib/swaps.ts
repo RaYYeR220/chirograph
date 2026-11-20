@@ -8,6 +8,7 @@ import {
   type StableSymbol,
 } from '@chirograph/sdk';
 import { CONFIG, TRUST } from './config';
+import { chainName } from './chains';
 import { bchProvider, scanWallet, signAndBroadcast, waitForUtxo, type WalletSnapshot } from './bchWallet';
 import { publicClient } from './evm';
 
@@ -248,7 +249,7 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
     token: { category, amount: BigInt(a.quote.amountIn) },
     changeAddress: change.address, tokenChangeAddress: a.wallet.receive.tokenAddress,
     memo: { chainId: chain.chainId, evmAddress: a.userEvm },
-    userPrompt: `Lock ${(a.quote.amountIn / 100).toFixed(2)} ${token} for ${(a.quote.amountOut / 100).toFixed(2)} USDC on ${chain.key === 'arbitrum' ? 'Arbitrum' : 'Base'}`,
+    userPrompt: `Lock ${(a.quote.amountIn / 100).toFixed(2)} ${token} for ${(a.quote.amountOut / 100).toFixed(2)} USDC on ${chainName(chain.key)}`,
   });
   const lockTxid = await signAndBroadcast(a.manager, built, 'Chirograph swap', a.signal);
   return solver.openOut({

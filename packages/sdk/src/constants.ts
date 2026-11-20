@@ -43,7 +43,7 @@ export const TIMEOUTS = {
   outEvmRefundSeconds: 1 * 3600,
 } as const;
 
-export type EvmChainKey = 'base' | 'arbitrum' | 'baseFork' | 'arbitrumFork' | 'baseSepolia' | 'arbitrumSepolia';
+export type EvmChainKey = 'base' | 'arbitrum' | 'optimism' | 'polygon' | 'baseFork' | 'arbitrumFork' | 'baseSepolia' | 'arbitrumSepolia';
 export type BchNetwork = 'mainnet' | 'chipnet';
 
 export interface EvmChainConfig {
@@ -69,6 +69,16 @@ export const EVM_CHAINS: Record<EvmChainKey, EvmChainConfig> = {
     usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
     htlc: '0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7',
     explorer: 'https://arbiscan.io', rpc: 'https://arb1.arbitrum.io/rpc',
+  },
+  optimism: {
+    key: 'optimism', chainId: 10, name: 'Optimism',
+    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+    explorer: 'https://optimistic.etherscan.io', rpc: 'https://optimism-rpc.publicnode.com',
+  },
+  polygon: {
+    key: 'polygon', chainId: 137, name: 'Polygon',
+    usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+    explorer: 'https://polygonscan.com', rpc: 'https://polygon-bor-rpc.publicnode.com',
   },
   baseFork: {
     key: 'baseFork', chainId: 8453, name: 'Base (local fork)',
