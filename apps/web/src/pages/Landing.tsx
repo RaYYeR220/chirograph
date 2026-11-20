@@ -37,7 +37,7 @@ export function Landing() {
         <section className="hero">
           <div className="panel rv d1" ref={panel}>
             <h1>One secret<br />opens both.</h1>
-            <p className="sub">USDC on Base or Arbitrum. PUSD on Bitcoin Cash. Both sides lock to the same 32-byte secret, and only the secret crosses. If anything stalls, both sides refund themselves.</p>
+            <p className="sub">USDC on Base or Arbitrum. PUSD or MUSD on Bitcoin Cash. Both sides lock to the same 32-byte secret, and only the secret crosses. If anything stalls, both sides refund themselves.</p>
             <div className="ctas">
               <Link className="btn ink" href="/swap">Swap USDC ↔ PUSD</Link>
               <button className="btn ghost" ref={watch} type="button">Watch a swap</button>
@@ -98,7 +98,7 @@ export function Landing() {
         <div className="wrap">
           <div className="sec-h">
             <h2>Take USDC.<br />Get PUSD.</h2>
-            <p>One script tag on any Bitcoin Cash shop. Your customer signs once with any USDC wallet on Base or Arbitrum; PUSD lands at your address seconds later.</p>
+            <p>One script tag on any Bitcoin Cash shop. Your customer signs once with any USDC wallet on Base or Arbitrum; PUSD (or MUSD) lands at your address seconds later.</p>
           </div>
           <div className="compare">
             <pre className="tile" style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: 13, overflowX: 'auto', whiteSpace: 'pre' }}>{snippet}</pre>
