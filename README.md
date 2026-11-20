@@ -2,6 +2,8 @@
 
 **Move $2 from USDC on Base to PUSD on Bitcoin Cash for 1¢, in about three seconds. The usual route costs about 23¢ and needs a second swap.**
 
+![Chirograph: one secret opens both](docs/img/home.jpg)
+
 A café in Manila takes Bitcoin Cash through Paytaca. A visitor holds USDC on Base. Today the visitor
 would have to sign up at an exchange or run a multi-hop route. With Chirograph they sign once, and the
 café sees PUSD a few seconds later.
@@ -51,6 +53,8 @@ secret.
 | 5 | 2026-11-20 07:44 | USDC → PUSD | Arbitrum | $0.28 → $0.27 | 3.4 s | 6.8 s | [0x3631b66b…](https://arbiscan.io/tx/0x3631b66bcd0e98ea555d73f71086063bbfc66f40807dfffdfe8af1bbdc120e2f) → [b0787eda…](https://explorer.selene.cash/tx/b0787eda7a9dc4da177299fa7f04e60a12df56571830187c140d7bf4f5b9ed6b) → [a0b48c9c…](https://explorer.selene.cash/tx/a0b48c9c090033df9cf11fffb9c699a133d9c5109fbc0e6b894d803d42fd29a9) → [0x689e0dd7…](https://arbiscan.io/tx/0x689e0dd7d3cb3ce574d434fe27f483541d9f746462ff9a363ea837361faa259f) |
 | 6 | 2026-11-20 07:44 | PUSD → USDC | Base | $0.27 → $0.26 | 8.2 s | 14 s | [b5a7fa30…](https://explorer.selene.cash/tx/b5a7fa30831f83408c15c22d0789fb49e3207356ffff2cf33d4fc20e5f04d3bd) → [0x928e61df…](https://basescan.org/tx/0x928e61dfe584f18b161bea22b9fae03234d466e0110b8ec3a3a8f2d257d81dd3) → [0x405aa9a1…](https://basescan.org/tx/0x405aa9a1184c0528dc31170d301aefa83e51ea59075ec2e9866f42bab32fe355) → [084b5149…](https://explorer.selene.cash/tx/084b514921a3c51a956ae166bf86086c686bc4b1285220e7ce9f06d60564b6b6) |
 <!-- swaps:end -->
+
+![A mainnet USDC to PUSD swap: one signature, then each step on both chains with its transaction](docs/img/swap-usdc-to-pusd.jpg)
 
 ## How it works
 
