@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount, useSignTypedData, useSwitchChain } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Address, Hex } from 'viem';
-import type { EvmChainKey } from '@chirograph/sdk';
+import type { EvmChainKey, Quote } from '@chirograph/sdk';
 import { addressToBytecode } from '@chirograph/sdk';
 import { Page } from '../components/Shell';
 import { EvmWalletRow } from '../components/Wallets';
@@ -39,6 +39,7 @@ export function Pay() {
   const [chain, setChain] = useState<EvmChainKey | null>(null);
   const activeChain = (chain ?? info?.chains[0]?.key ?? 'base') as EvmChainKey;
   const decide = useRef<((ok: boolean) => void) | null>(null);
+  const [pending, setPending] = useState<Quote | null>(null);
 
   const deps = useMemo(() => ({
     info, bch, evmAddress, bchTarget: to,
@@ -47,10 +48,11 @@ export function Pay() {
       await switchChainAsync({ chainId: Number((typed as { domain: { chainId: number } }).domain.chainId) as 8453 }).catch(() => undefined);
       return signTypedDataAsync(typed);
     },
-    confirmQuote: async () => true,
+    // Always an explicit in-frame confirmation that shows the full payee and amount before signing.
+    confirmQuote: (q: Quote) => new Promise<boolean>((resolve) => { setPending(q); decide.current = resolve; }),
   }), [info, bch, evmAddress, to, signTypedDataAsync, switchChainAsync]);
   const runner = useSwapRunner(deps as never);
-  void decide;
+  const answer = (yes: boolean) => { decide.current?.(yes); decide.current = null; setPending(null); };
 
   // Tell the embedding page when the merchant has been paid.
   useEffect(() => {
@@ -78,6 +80,21 @@ export function Pay() {
           ))}</span>
         </div>
         <div className="wallets"><EvmWalletRow chainId={chainIdOf(activeChain)} devAddress={devAccount?.address} /></div>
+        {pending ? (
+          <div className="leg" style={{ background: 'var(--bone2)' }}>
+            <div className="label">Confirm this payment</div>
+            <div className="rows">
+              <div><span>You pay</span><b>{(pending.amountIn / 100).toFixed(2)} USDC on {chainName(activeChain)}</b></div>
+              <div><span>Merchant receives</span><b>{(pending.amountOut / 100).toFixed(2)} PUSD</b></div>
+            </div>
+            <div className="label" style={{ marginTop: 10 }}>Paid to this Bitcoin Cash address, and nowhere else</div>
+            <code style={{ display: 'block', fontSize: 12, wordBreak: 'break-all', marginTop: 4 }}>{to}</code>
+            <div className="ctas" style={{ marginTop: 14 }}>
+              <button className="btn ink" type="button" onClick={() => answer(true)}>Confirm and sign</button>
+              <button className="btn ghost" type="button" onClick={() => answer(false)}>Cancel</button>
+            </div>
+          </div>
+        ) : null}
         {!ok ? <div className="notice err">This payment link is incomplete: it needs a Bitcoin Cash token address and an amount of at least $0.25.</div> : (
           <button className="btn ink wide" style={{ marginTop: 16 }} type="button" disabled={!info || !evmAddress || busy}
             onClick={() => void runner.start('in', activeChain, cents + fee)}>
