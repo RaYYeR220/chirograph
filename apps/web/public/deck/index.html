@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chirograph · BCH BLAZE 2026</title>
+<meta name="description" content="Chirograph: USDC on Base or Arbitrum ↔ PUSD on Bitcoin Cash. One secret opens both.">
+<style>
+@font-face { font-family: 'General Sans'; src: url('/fonts/GeneralSans-500.woff2') format('woff2'); font-weight: 500; }
+@font-face { font-family: 'General Sans'; src: url('/fonts/GeneralSans-600.woff2') format('woff2'); font-weight: 600; }
+:root { --bg:#e4471d; --ink:#140c08; --bone:#fff3ea; --muted:rgba(20,12,8,.74); --faint:rgba(20,12,8,.56); --line:rgba(20,12,8,.14); }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #1b100b; color: var(--ink); font-family: 'General Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.deck { display: grid; gap: 28px; padding: 28px; justify-items: center; }
+.slide { width: min(100%, 1280px); aspect-ratio: 16 / 9; background: var(--bg); position: relative; overflow: hidden; border-radius: 10px; padding: 5.2% 6%; display: flex; flex-direction: column; }
+.slide::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(20,12,8,.42) 1.1px, transparent 1.3px); background-size: 22px 22px; opacity: .55; pointer-events: none; }
+.slide::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 40px; margin-left: -20px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='120' viewBox='0 0 40 120'%3E%3Cpath d='M20 0 C34 15 34 45 20 60 C6 75 6 105 20 120' fill='none' stroke='%23140c08' stroke-width='1.3'/%3E%3C/svg%3E") repeat-y center / 40px 120px; opacity: .85; }
+.slide > * { position: relative; z-index: 1; }
+.top { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: clamp(11px, 1.15vw, 15px); }
+.top .brand { display: flex; gap: 8px; align-items: center; }
+.top svg { width: 24px; height: 14px; }
+.top .n { color: var(--faint); font-variant-numeric: tabular-nums; }
+.body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.panel { background: rgba(232,78,36,.86); border: 1px solid rgba(20,12,8,.12); border-radius: 18px; padding: 3.2% 3.6%; backdrop-filter: blur(2px); }
+h1 { font-size: clamp(36px, 7.4vw, 104px); line-height: .92; letter-spacing: -.05em; margin: 0; font-weight: 600; }
+h2 { font-size: clamp(26px, 4.3vw, 60px); line-height: .96; letter-spacing: -.045em; margin: 0 0 .5em; font-weight: 600; }
+p, li { font-size: clamp(12px, 1.45vw, 19px); line-height: 1.45; font-weight: 500; color: var(--muted); }
+p { margin: .5em 0 0; }
+b { color: var(--ink); font-weight: 600; }
+.mono { font-family: ui-monospace, 'Geist Mono', monospace; font-size: .86em; color: var(--ink); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 3.2%; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.card { background: rgba(255,243,234,.9); border-radius: 14px; padding: 6% 7%; }
+.card .k { font-size: clamp(10px, 1vw, 13px); color: var(--faint); font-weight: 600; }
+.card .v { font-size: clamp(22px, 3.4vw, 46px); font-weight: 600; letter-spacing: -.04em; color: var(--ink); line-height: 1; margin: .25em 0 .2em; }
+.card p { margin: 0; font-size: clamp(10px, 1.1vw, 14px); }
+ul { margin: .4em 0 0; padding-left: 1.1em; }
+li { margin: .25em 0; }
+.foot { display: flex; justify-content: space-between; font-size: clamp(10px, 1vw, 13px); color: var(--faint); font-weight: 500; }
+.chip { display: inline-block; background: var(--ink); color: var(--bone); border-radius: 999px; padding: .35em .9em; font-size: clamp(11px, 1.1vw, 14px); font-weight: 600; margin-right: 6px; }
+a { color: var(--ink); }
+@media print { html, body { background: #fff; } .deck { padding: 0; gap: 0; } .slide { width: 100%; border-radius: 0; break-after: page; } }
+</style>
+</head>
+<body>
+<main class="deck">
+
+<section class="slide">
+  <div class="top"><span class="brand"><svg viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 7c1.6-4.2 3.4-4.2 5 0s3.2 4.6 4.6 0 3.4-3.2 4.8 0 3.2 3.8 6.6-1.6"/></svg>Chirograph</span><span class="n">BCH BLAZE 2026 · Mainnet track</span></div>
+  <div class="body"><div class="panel" style="max-width: 74%;">
+    <h1>One secret<br>opens both.</h1>
+    <p style="max-width: 88%;"><b>USDC in, PUSD out, in seconds.</b> Trustless swaps between USDC on Base or Arbitrum and ParyonUSD on Bitcoin Cash. One signature, no bridge, no wrapped token.</p>
+    <p><span class="chip">chirograph · live app</span><span class="chip">github.com/RaYYeR220/chirograph</span></p>
+  </div></div>
+  <div class="foot"><span>Solo builder · X @BazydloMis57623</span><span>01 / 06</span></div>
+</section>
+
+<section class="slide">
+  <div class="top"><span class="brand">The Story of Chirograph</span><span class="n">02 / 06</span></div>
+  <div class="body two">
+    <div class="panel">
+      <h2>Bitcoin Cash got its dollar. It can't get out.</h2>
+      <p>Most people arrive in crypto through stablecoins, and almost all of them sit on EVM chains. ParyonUSD gave Bitcoin Cash its own dollar this year: <b>over $1M locked</b>, and the peg held while BCH fell 37%. But <b>no bridge moves a CashToken off BCH</b>, so dollars come in and out through an exchange or a slow multi-hop route.</p>
+    </div>
+    <div class="panel">
+      <h2>So we cut a deed in two.</h2>
+      <p>A medieval <b>chirograph</b> was one deed written twice and cut apart through a word; only the two halves match. Chirograph locks USDC on its chain and PUSD on Bitcoin Cash to the <b>same 32-byte secret</b>. Revealing it to collect one side is exactly what lets the other side collect theirs. Nothing is bridged. Only the secret crosses.</p>
+    </div>
+  </div>
+  <div class="foot"><span>A Base shopper pays a Bitcoin Cash merchant with USDC; the merchant's Paytaca shows PUSD seconds later.</span><span></span></div>
+</section>
+
+<section class="slide">
+  <div class="top"><span class="brand">Benefits of Chirograph</span><span class="n">03 / 06</span></div>
+  <div class="body">
+    <div class="cards">
+      <div class="card"><div class="k">USDC → PUSD</div><div class="v" data-k="in">1.5 s</div><p>signature to spendable PUSD. Today: ~30 s and a second swap via THORChain + Cauldron.</p></div>
+      <div class="card"><div class="k">PUSD → USDC</div><div class="v" data-k="out">5 s</div><p>signature to USDC in your wallet. Today: ~10 min, waiting for a BCH block.</p></div>
+      <div class="card"><div class="k">Fees on $2</div><div class="v">0.3%</div><p>min 1¢. Today: ~11%, mostly THORChain's fixed outbound fee.</p></div>
+      <div class="card"><div class="k">Signatures</div><div class="v">1</div><p>per swap. EVM gas is paid by the relayer (EIP-3009).</p></div>
+      <div class="card"><div class="k">Custody</div><div class="v">None</div><p>USDC stays on its chain, PUSD stays on BCH. Stalls refund both sides automatically.</p></div>
+      <div class="card"><div class="k">Merchants</div><div class="v">1 tag</div><p>"Pay with USDC" button: any USDC wallet pays, the shop receives PUSD.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span data-k="src">Chirograph: measured end to end on chipnet + a Base fork with real USDC. Baseline: THORChain quote API.</span><span></span></div>
+</section>
+
+<section class="slide">
+  <div class="top"><span class="brand">BCH Usage</span><span class="n">04 / 06</span></div>
+  <div class="body two">
+    <div class="panel">
+      <h2>A 72-byte keyless covenant.</h2>
+      <ul>
+        <li><b>CashScript 0.14</b>, P2SH32. <span class="mono">claim(secret)</span> / <span class="mono">refund()</span>, no signatures at all.</li>
+        <li>Introspection pins the payout: destination, <b>token category, amount, NFT commitment</b>, fee ≤ 1,000 sats.</li>
+        <li>Shared payout rule compiled into <b>OP_DEFINE / OP_INVOKE</b> from the May 2026 upgrade.</li>
+        <li>Anyone can execute a claim or refund; nobody can redirect it.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h2>BCH's speed, used honestly.</h2>
+      <ul>
+        <li><b>PUSD</b> (CashTokens) is the asset; <b>WizardConnect</b> connects Selene, Paytaca, Cashonize.</li>
+        <li><b>0-conf + double-spend proofs</b>: 4 s window, P2PKH-only inputs, capped per swap and in total.</li>
+        <li>Every swap is real <b>BCH mainnet</b> transactions a judge makes from the live site.</li>
+        <li><b>One-minute blocks</b> (locked in Nov 15) shrink every timeout from May 2027.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>20 covenant tests · 64 EVM tests incl. fork tests on real USDC · end-to-end through the real WizardConnect protocol</span><span></span></div>
+</section>
+
+<section class="slide">
+  <div class="top"><span class="brand">The Vision for Chirograph</span><span class="n">05 / 06</span></div>
+  <div class="body two">
+    <div class="panel">
+      <h2>The on-ramp BCH dollars need.</h2>
+      <ul>
+        <li><b>Open solver network</b>: the quote API is public; anyone with PUSD and USDC can fill and earn the spread.</li>
+        <li><b>More pairs</b>: USDT, Solana, Tron; PUSD V2 and any CashToken stable.</li>
+        <li><b>Merchant rails</b>: "Pay with USDC" inside Paytaca and Selene POS, settled in PUSD.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h2>How it makes money.</h2>
+      <ul>
+        <li><b>Spread</b> on every swap (0.3% today) for solvers.</li>
+        <li><b>Widget fee</b> for merchant checkout volume.</li>
+        <li><b>Routing</b>: Chirograph for speed under the 0-conf cap, THORChain for size.</li>
+      </ul>
+      <p>Next priority: a second solver and native USDC liquidity on BCH, without a single custodian.</p>
+    </div>
+  </div>
+  <div class="foot"><span></span><span></span></div>
+</section>
+
+<section class="slide">
+  <div class="top"><span class="brand"><svg viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 7c1.6-4.2 3.4-4.2 5 0s3.2 4.6 4.6 0 3.4-3.2 4.8 0 3.2 3.8 6.6-1.6"/></svg>Chirograph</span><span class="n">06 / 06</span></div>
+  <div class="body"><div class="panel" style="max-width: 70%;">
+    <h1>Thank you.</h1>
+    <p>Swap $1 yourself: connect Selene and any EVM wallet. Every step links to both chains.</p>
+    <p><b>Code</b> <span class="mono">github.com/RaYYeR220/chirograph</span><br><b>Vote</b> <span class="mono">bitcoincash:zq504stpc4fz0q3dcay8p4na53ldvwq7zumxazktwt</span></p>
+  </div></div>
+  <div class="foot"><span>Built for BCH BLAZE 2026</span><span></span></div>
+</section>
+
+</main>
+</body>
+</html>
