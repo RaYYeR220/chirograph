@@ -1,4 +1,4 @@
-import { PUSD_CATEGORY, EVM_CHAINS, type BchNetwork } from '@chirograph/sdk';
+import { PUSD_CATEGORY, MUSD_CATEGORY, EVM_CHAINS, type BchNetwork } from '@chirograph/sdk';
 
 const env = import.meta.env;
 
@@ -39,6 +39,11 @@ export const TRUST = {
   /** Above this many cents, wait for one confirmation of the solver's BCH lock before claiming. */
   userInstantMax: Number(env.VITE_USER_INSTANT_MAX_CENTS ?? 500),
   tokenCategory: ((env.VITE_TOKEN_CATEGORY as string | undefined) ?? PUSD_CATEGORY).toLowerCase(),
+  /** Every Bitcoin Cash dollar this app will swap, by symbol. A solver offering any other category is refused. */
+  tokens: {
+    PUSD: ((env.VITE_TOKEN_CATEGORY as string | undefined) ?? PUSD_CATEGORY).toLowerCase(),
+    MUSD: ((env.VITE_MUSD_CATEGORY as string | undefined) ?? MUSD_CATEGORY).toLowerCase(),
+  } as Record<'PUSD' | 'MUSD', string>,
   chains: {
     8453: {
       usdc: ((env.VITE_USDC_8453 as string | undefined) ?? EVM_CHAINS.base.usdc).toLowerCase(),

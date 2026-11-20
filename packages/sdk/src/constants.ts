@@ -3,6 +3,15 @@ import type { Address, Hex } from 'viem';
 /** ParyonUSD (PUSD) fungible CashToken on Bitcoin Cash mainnet. 2 decimals: 1 base unit = 0.01 PUSD. */
 export const PUSD_CATEGORY = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
 export const PUSD_DECIMALS = 2;
+/** MoriaUSD (MUSD), Bitcoin Cash's other dollar CashToken. Also 2 decimals, so 1 unit = $0.01 too. */
+export const MUSD_CATEGORY = 'b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366';
+
+/** The Bitcoin Cash dollars a swap can deliver or take. The lock covenant works for any fungible CashToken. */
+export type StableSymbol = 'PUSD' | 'MUSD';
+export const STABLES: Record<StableSymbol, { symbol: StableSymbol; name: string; category: string }> = {
+  PUSD: { symbol: 'PUSD', name: 'ParyonUSD', category: PUSD_CATEGORY },
+  MUSD: { symbol: 'MUSD', name: 'MoriaUSD', category: MUSD_CATEGORY },
+};
 /** USDC uses 6 decimals on every EVM chain we support. */
 export const USDC_DECIMALS = 6;
 /** 1 PUSD base unit (0.01) = 10_000 USDC base units (0.000001). */

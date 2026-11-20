@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount, useSignTypedData, useSwitchChain } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Address, Hex } from 'viem';
-import type { EvmChainKey, Quote } from '@chirograph/sdk';
+import type { EvmChainKey, Quote, StableSymbol } from '@chirograph/sdk';
 import { addressToBytecode } from '@chirograph/sdk';
 import { Page } from '../components/Shell';
 import { EvmWalletRow } from '../components/Wallets';
@@ -28,6 +28,8 @@ export function Pay() {
   const label = params.get('label') ?? '';
   const embed = params.get('embed') === '1';
   const cents = Math.round(Number(params.get('amount') ?? '0') * 100);
+  // Which Bitcoin Cash dollar the merchant wants: PUSD unless the button asks for MUSD.
+  const token: StableSymbol = params.get('token')?.toUpperCase() === 'MUSD' ? 'MUSD' : 'PUSD';
   const ok = validTarget(to) && cents >= 25;
 
   const { info } = useSolverInfo(15_000);
@@ -69,7 +71,7 @@ export function Pay() {
         <div className="label">{label ? `Pay · ${label}` : 'Pay a Bitcoin Cash merchant'}</div>
         <div className="amount"><span className="big">${((cents + fee) / 100).toFixed(2)}</span><span className="unit">USDC</span></div>
         <div className="rows">
-          <div><span>Merchant receives</span><b>{(cents / 100).toFixed(2)} PUSD</b></div>
+          <div><span>Merchant receives</span><b>{(cents / 100).toFixed(2)} {token}</b></div>
           <div><span>To</span><b className="mono" style={{ fontSize: 12 }}>{to.slice(0, 18)}…{to.slice(-6)}</b></div>
           <div><span>Network fee</span><b>paid by the relayer</b></div>
         </div>
@@ -85,7 +87,7 @@ export function Pay() {
             <div className="label">Confirm this payment</div>
             <div className="rows">
               <div><span>You pay</span><b>{(pending.amountIn / 100).toFixed(2)} USDC on {chainName(activeChain)}</b></div>
-              <div><span>Merchant receives</span><b>{(pending.amountOut / 100).toFixed(2)} PUSD</b></div>
+              <div><span>Merchant receives</span><b>{(pending.amountOut / 100).toFixed(2)} {pending.token ?? 'PUSD'}</b></div>
             </div>
             <div className="label" style={{ marginTop: 10 }}>Paid to this Bitcoin Cash address, and nowhere else</div>
             <code style={{ display: 'block', fontSize: 12, wordBreak: 'break-all', marginTop: 4 }}>{to}</code>
@@ -97,19 +99,19 @@ export function Pay() {
         ) : null}
         {!ok ? <div className="notice err">This payment link is incomplete: it needs a Bitcoin Cash token address and an amount of at least $0.25.</div> : (
           <button className="btn ink wide" style={{ marginTop: 16 }} type="button" disabled={!info || !evmAddress || busy}
-            onClick={() => void runner.start('in', activeChain, cents + fee)}>
+            onClick={() => void runner.start('in', activeChain, cents + fee, token)}>
             {busy ? 'Paying…' : `Pay $${((cents + fee) / 100).toFixed(2)} with USDC`}
           </button>
         )}
         {embed ? <button className="btn ghost wide sm" style={{ marginTop: 8 }} type="button" onClick={() => window.parent?.postMessage({ type: 'chirograph:close' }, '*')}>Close</button> : null}
       </div>
-      <SwapProgress swap={runner.swap} stage={runner.stage} error={runner.error} note={runner.note} started={runner.started} fundsAt={runner.fundsAt} plan="in" />
+      <SwapProgress swap={runner.swap} stage={runner.stage} error={runner.error} note={runner.note} started={runner.started} fundsAt={runner.fundsAt} plan="in" planAmount={cents + fee} planToken={token} />
     </div>
   );
   if (embed) return <div style={{ padding: 12 }}>{content}</div>;
   return (
     <Page>
-      <div className="page-h"><h1>Checkout</h1><p>Pay any Bitcoin Cash merchant with USDC on Base or Arbitrum. One signature; the merchant receives PUSD seconds later.</p></div>
+      <div className="page-h"><h1>Checkout</h1><p>Pay any Bitcoin Cash merchant with USDC on Base or Arbitrum. One signature; the merchant receives PUSD or MUSD seconds later.</p></div>
       {content}
     </Page>
   );

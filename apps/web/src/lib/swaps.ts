@@ -5,6 +5,7 @@ import {
   SolverClient, TIMEOUTS, LockState, addressToBytecode, buildKeylessSpend, buildWalletLockTx, findLockUtxo,
   generateSecret, hashSecret, htlcAbi, lockAuthorization, makeLockContract, to0x, usdcDomain,
   type BchLockParams, type Quote, type SolverInfo, type SwapRecord,
+  type StableSymbol,
 } from '@chirograph/sdk';
 import { CONFIG, TRUST } from './config';
 import { bchProvider, scanWallet, signAndBroadcast, waitForUtxo, type WalletSnapshot } from './bchWallet';
@@ -37,18 +38,23 @@ export function trustedChain(info: SolverInfo, key: string): SolverChain {
   return chain;
 }
 
-/** The token category we trade, pinned in the app; the solver must agree. */
-export function trustedCategory(info: SolverInfo): string {
-  if (info.pusdCategory.toLowerCase() !== TRUST.tokenCategory) throw new Error('the solver trades a token this app does not trust');
-  return TRUST.tokenCategory;
+/** The category of `token`, pinned in the app; the solver must advertise exactly that one. */
+export function trustedCategory(info: SolverInfo, token: StableSymbol = 'PUSD'): string {
+  const pinned = TRUST.tokens[token];
+  const offered = token === 'PUSD' ? info.pusdCategory : info.tokens?.find((t) => t.symbol === token)?.category;
+  if (!pinned || offered?.toLowerCase() !== pinned) throw new Error(`the solver trades a ${token} this app does not trust`);
+  return pinned;
 }
 
 /**
  * A quote is only a proposal. Before anything is signed it must match what the user asked for,
  * not be stale, and not charge more than the fee schedule pinned in this app.
  */
-export function checkQuote(quote: Quote, want: { direction: 'in' | 'out'; chain: string; amount: number }) {
+export function checkQuote(quote: Quote, want: { direction: 'in' | 'out'; chain: string; amount: number; token?: StableSymbol }) {
   if (quote.direction !== want.direction || quote.chain !== want.chain) throw new Error('quote is for a different swap');
+  const token = want.token ?? 'PUSD';
+  if ((quote.token ?? 'PUSD') !== token) throw new Error('quote is for a different token');
+  if (quote.tokenCategory && quote.tokenCategory.toLowerCase() !== TRUST.tokens[token]) throw new Error('quote names a token this app does not trust');
   if (quote.amountIn !== want.amount) throw new Error('quote amount differs from what you entered');
   const maxFee = Math.max(TRUST.minFee, Math.ceil((want.amount * TRUST.feeBps) / 10_000));
   if (quote.amountOut < want.amount - maxFee) throw new Error('quote charges more than this app allows');
@@ -73,6 +79,9 @@ export interface StoredSwap {
   revealedAt?: number;
   /** The EVM lock this browser verified before revealing; the only lock we watch afterwards. */
   verifiedLockId?: string;
+  /** Which Bitcoin Cash dollar, and its pinned category (PUSD when missing: older records). */
+  token?: StableSymbol;
+  category?: string;
 }
 const KEY = 'chirograph:swaps';
 
@@ -100,7 +109,7 @@ export interface InArgs {
   info: SolverInfo;
   quote: Quote;
   userEvm: Address;
-  /** Where the PUSD should land (the connected wallet's receive address, or any token address). */
+  /** Where the PUSD/MUSD should land (the connected wallet's receive address, or any token address). */
   bchTokenAddress: string;
   signTypedData: (typed: ReturnType<typeof lockAuthorization>) => Promise<Hex>;
 }
@@ -109,6 +118,8 @@ export interface InArgs {
 export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
   const chain = trustedChain(a.info, a.quote.chain);
   if (a.quote.htlc.toLowerCase() !== chain.htlc.toLowerCase()) throw new Error('quote escrow mismatch');
+  const token = a.quote.token ?? 'PUSD';
+  const category = trustedCategory(a.info, token);
   const secret = generateSecret();
   const secretHash = to0x(hashSecret(secret));
   const id = secretHash.slice(2);
@@ -116,6 +127,7 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
   storeSwap({
     id, secret: binToHex(secret), direction: 'in', chain: chain.key, createdAt: now(),
     bchTarget: a.bchTokenAddress, evmTarget: a.userEvm, amountIn: a.quote.amountIn, amountOut: a.quote.amountOut, ownRefundTime: evmRefundTime,
+    token, category,
   });
   const validBefore = now() + 20 * 60;
   const domain = await usdcDomain(publicClient(chain.chainId), chain.usdc, chain.chainId);
@@ -125,7 +137,7 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
   }, domain, BigInt(validBefore));
   const signature = await a.signTypedData(typed);
   return solver.openIn({
-    chain: chain.key, amount: a.quote.amountIn, secretHash, userEvm: a.userEvm,
+    chain: chain.key, amount: a.quote.amountIn, token, secretHash, userEvm: a.userEvm,
     userBchAddress: a.bchTokenAddress, evmRefundTime, validBefore, signature,
   });
 }
@@ -136,8 +148,9 @@ export async function startSwapIn(a: InArgs): Promise<SwapRecord> {
  * the automatic refund.
  */
 export async function claimSwapIn(swap: SwapRecord, onWait?: (msg: string) => void): Promise<string> {
-  const category = TRUST.tokenCategory;
   const local = storedSwap(swap.id);
+  // The category THIS browser pinned when it started the swap (PUSD for records from before MUSD).
+  const category = local?.category ?? TRUST.tokens[local?.token ?? 'PUSD'];
   const secret = secretFor(swap.id);
   if (!local || !secret || local.direction !== 'in') throw new Error('this browser does not hold this swap');
   const localHash = binToHex(hashSecret(secret));
@@ -210,7 +223,8 @@ export interface OutArgs {
 /** One signature: the wallet signs a BCH lock that also commits to the EVM payout address. */
 export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
   const chain = trustedChain(a.info, a.quote.chain);
-  const category = trustedCategory(a.info);
+  const token = a.quote.token ?? 'PUSD';
+  const category = trustedCategory(a.info, token);
   const p = await bchProvider();
   const secret = generateSecret();
   const secretHash = hashSecret(secret);
@@ -219,6 +233,7 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
   storeSwap({
     id, secret: binToHex(secret), direction: 'out', chain: chain.key, createdAt: now(),
     bchTarget: a.wallet.receive.tokenAddress, evmTarget: a.userEvm, amountIn: a.quote.amountIn, amountOut: a.quote.amountOut, ownRefundTime: bchRefundTime,
+    token, category,
   });
   const params: BchLockParams = {
     secretHash,
@@ -233,11 +248,11 @@ export async function startSwapOut(a: OutArgs): Promise<SwapRecord> {
     token: { category, amount: BigInt(a.quote.amountIn) },
     changeAddress: change.address, tokenChangeAddress: a.wallet.receive.tokenAddress,
     memo: { chainId: chain.chainId, evmAddress: a.userEvm },
-    userPrompt: `Lock ${(a.quote.amountIn / 100).toFixed(2)} PUSD for ${(a.quote.amountOut / 100).toFixed(2)} USDC on ${chain.key === 'arbitrum' ? 'Arbitrum' : 'Base'}`,
+    userPrompt: `Lock ${(a.quote.amountIn / 100).toFixed(2)} ${token} for ${(a.quote.amountOut / 100).toFixed(2)} USDC on ${chain.key === 'arbitrum' ? 'Arbitrum' : 'Base'}`,
   });
   const lockTxid = await signAndBroadcast(a.manager, built, 'Chirograph swap', a.signal);
   return solver.openOut({
-    chain: chain.key, amount: a.quote.amountIn, secretHash: id, userEvm: a.userEvm,
+    chain: chain.key, amount: a.quote.amountIn, token, secretHash: id, userEvm: a.userEvm,
     userBchAddress: a.wallet.receive.tokenAddress, bchRefundTime, lockTxid,
   });
 }

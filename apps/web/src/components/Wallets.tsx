@@ -41,7 +41,7 @@ export function BchWalletRow({ bch, onConnect }: { bch: ReturnType<typeof useBch
       <div className="who">
         <b>Bitcoin Cash{bch.wc.walletName ? ` · ${bch.wc.walletName}` : ''}</b>
         {connected
-          ? <code title={bch.wallet!.receive.tokenAddress}>{short(bch.wallet!.receive.tokenAddress, 18, 6)} · {usd(bch.wallet!.tokens)} PUSD</code>
+          ? <code title={bch.wallet!.receive.tokenAddress}>{short(bch.wallet!.receive.tokenAddress, 18, 6)} · {usd(bch.wallet!.tokensBy[TRUST.tokens.PUSD] ?? 0n)} PUSD · {usd(bch.wallet!.tokensBy[TRUST.tokens.MUSD] ?? 0n)} MUSD</code>
           : <code>{bch.wc.state === 'connected' ? 'reading balances…' : 'Selene · Paytaca · Cashonize'}</code>}
       </div>
       {bch.wc.state === 'connected'

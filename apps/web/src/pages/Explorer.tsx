@@ -63,7 +63,7 @@ export function Explorer() {
             {swaps.map((s) => (
               <li key={s.id}><Link href={`/swap/${s.id}`}>
                 <span className={`badge${s.status === 'completed' ? ' ok' : s.status === 'failed' ? ' bad' : ''}`}>{s.status.replace(/_/g, ' ')}</span>
-                <span>{s.direction === 'in' ? `USDC (${chainName(s.chain)}) → PUSD` : `PUSD → USDC (${chainName(s.chain)})`}</span>
+                <span>{s.direction === 'in' ? `USDC (${chainName(s.chain)}) → ${s.token ?? 'PUSD'}` : `${s.token ?? 'PUSD'} → USDC (${chainName(s.chain)})`}</span>
                 <span className="amt">${(s.amountIn / 100).toFixed(2)}</span>
                 <span className="t hide-sm">{secondsToSettle(s) !== null ? `settled in ${secondsToSettle(s)} s` : s.tier}</span>
                 <span className="t">{ago(s.createdAt)}</span>

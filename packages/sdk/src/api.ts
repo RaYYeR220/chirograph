@@ -1,6 +1,6 @@
-import type { EvmChainKey } from './constants.js';
+import type { EvmChainKey, StableSymbol } from './constants.js';
 
-/** `in`: USDC on an EVM chain -> PUSD on Bitcoin Cash. `out`: PUSD -> USDC. */
+/** `in`: USDC on an EVM chain -> a Bitcoin Cash dollar (PUSD or MUSD). `out`: the reverse. */
 export type Direction = 'in' | 'out';
 
 /** Amounts in the API are always integer cents (1 = $0.01 = 1 PUSD base unit). */
@@ -22,6 +22,8 @@ export interface QuoteRequest {
   direction: Direction;
   chain: EvmChainKey;
   amount: Cents;
+  /** Which Bitcoin Cash dollar; PUSD when omitted. */
+  token?: StableSymbol;
 }
 
 export interface Quote {
@@ -31,6 +33,9 @@ export interface Quote {
   amountOut: Cents;
   fee: Cents;
   tier: Tier;
+  token: StableSymbol;
+  /** CashToken category of `token`; the browser checks it against its own pinned list. */
+  tokenCategory: string;
   /** Unix seconds after which this quote is no longer honoured. */
   expiresAt: number;
   solver: { bchAddress: string; bchTokenAddress: string; evmAddress: `0x${string}` };
@@ -45,11 +50,16 @@ export interface SolverInfo {
   chains: Array<{ key: EvmChainKey; chainId: number; htlc: `0x${string}`; usdc: `0x${string}`; explorer: string }>;
   feeBps: number;
   minFee: Cents;
-  /** Largest single swap the solver can fill right now, per direction and chain. */
-  capacity: Record<string, { in: Cents; out: Cents }>;
+  /**
+   * Largest single swap the solver can fill right now, per chain and direction. `in` is for PUSD;
+   * `inBy` has the in-direction limit for every token the solver trades.
+   */
+  capacity: Record<string, { in: Cents; out: Cents; inBy?: Partial<Record<StableSymbol, Cents>> }>;
   instantTierMax: Cents;
-  inventory: { pusd: Cents; bchSats: string; usdc: Record<string, Cents> };
+  inventory: { pusd: Cents; bchSats: string; usdc: Record<string, Cents>; tokens?: Partial<Record<StableSymbol, Cents>> };
+  /** PUSD's category (kept for older clients); `tokens` lists every token this solver trades. */
   pusdCategory: string;
+  tokens?: Array<{ symbol: StableSymbol; category: string }>;
   version: string;
 }
 
@@ -70,20 +80,23 @@ export interface SwapRecord {
   amountIn: Cents;
   amountOut: Cents;
   fee: Cents;
+  /** PUSD when omitted (records from before MUSD support). */
+  token?: StableSymbol;
   secretHash: string;
   secret?: string;
   user: { bchAddress?: string; evmAddress?: string };
-  bch: { lockAddress: string; refundTime: number; claimBytecode: string; refundBytecode: string; tokenAmount: number; lockTxid?: string; spendTxid?: string; refunded?: boolean; lockAttemptAt?: number; lockHex?: string };
+  bch: { lockAddress: string; refundTime: number; claimBytecode: string; refundBytecode: string; tokenAmount: number; tokenCategory?: string; lockTxid?: string; spendTxid?: string; refunded?: boolean; lockAttemptAt?: number; lockHex?: string };
   evm: { htlc: string; lockId: string; refundTime: number; amount: string; sender: string; recipient: string; lockTx?: string; spendTx?: string; refunded?: boolean; lockAttemptAt?: number; validBefore?: number };
   createdAt: number;
   updatedAt: number;
   timeline: TimelineEvent[];
 }
 
-/** Body for opening a USDC -> PUSD swap: the user's gasless lock authorization. */
+/** Body for opening a USDC -> PUSD/MUSD swap: the user's gasless lock authorization. */
 export interface OpenInSwap {
   chain: EvmChainKey;
   amount: Cents;
+  token?: StableSymbol;
   secretHash: string;
   userEvm: `0x${string}`;
   userBchAddress: string;
@@ -92,10 +105,11 @@ export interface OpenInSwap {
   signature: `0x${string}`;
 }
 
-/** Body for opening a PUSD -> USDC swap, sent right after the user's BCH lock is broadcast. */
+/** Body for opening a PUSD/MUSD -> USDC swap, sent right after the user's BCH lock is broadcast. */
 export interface OpenOutSwap {
   chain: EvmChainKey;
   amount: Cents;
+  token?: StableSymbol;
   secretHash: string;
   userEvm: `0x${string}`;
   userBchAddress: string;

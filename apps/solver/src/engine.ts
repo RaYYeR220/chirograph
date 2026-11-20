@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { binToHex, hexToBin } from '@bitauth/libauth';
 import type { Address, Hex } from 'viem';
 import {
-  LOCK_SATS, TIMEOUTS, USDC_UNITS_PER_PUSD_UNIT, addressToBytecode, bytecodeToAddress, computeLockId, hashSecret,
+  LOCK_SATS, TIMEOUTS, USDC_UNITS_PER_PUSD_UNIT, type StableSymbol, addressToBytecode, bytecodeToAddress, computeLockId, hashSecret,
   quoteFee, LockState, parseLockMemo, htlcAbi,
   type BchLockParams, type EvmChainKey, type OpenInSwap, type OpenOutSwap, type Quote, type QuoteRequest,
   type SolverInfo, type SwapRecord, type SwapStatus, type TimelineEvent,
@@ -31,7 +31,7 @@ const SATS_PER_IN_SWAP = LOCK_SATS + 2_000n;
 export class Engine {
   readonly events = new EventEmitter();
   private busy = new Set<string>();
-  private inventory = { tokens: 0n, sats: 0n, usdc: new Map<EvmChainKey, bigint>(), at: 0 };
+  private inventory = { tokens: new Map<string, bigint>(), sats: 0n, usdc: new Map<EvmChainKey, bigint>(), at: 0 };
   /** Capacity check and reservation happen under one lock, so concurrent opens cannot over-commit. */
   private openLock = new Mutex();
   /** 0-conf fill decisions run one at a time, so the exposure cap cannot be raced. */
@@ -50,7 +50,9 @@ export class Engine {
 
   async info(): Promise<SolverInfo> {
     await this.refreshInventory();
-    const pusd = Number(this.inventory.tokens);
+    const held = (sym: StableSymbol) => Number(this.inventory.tokens.get(this.cfg.tokens[sym] ?? '') ?? 0n);
+    const pusd = held('PUSD');
+    const symbols = Object.keys(this.cfg.tokens) as StableSymbol[];
     const reserved = this.reserved();
     // Every USDC -> PUSD swap spends some of our BCH on its lock and fees; stop before we run dry.
     const satsBudget = this.inventory.sats - this.cfg.satsReserve - BigInt(reserved.inSwaps) * SATS_PER_IN_SWAP;
@@ -60,8 +62,13 @@ export class Engine {
     for (const key of this.evm.keys()) {
       const bal = Number((this.inventory.usdc.get(key) ?? 0n) / USDC_UNITS_PER_PUSD_UNIT);
       usdc[key] = bal;
+      const inBy: Partial<Record<StableSymbol, number>> = {};
+      for (const sym of symbols) {
+        inBy[sym] = bchOk ? Math.max(0, Math.min(this.cfg.swapMax, held(sym) - (reserved.tokens.get(sym) ?? 0))) : 0;
+      }
       capacity[key] = {
-        in: bchOk ? Math.max(0, Math.min(this.cfg.swapMax, pusd - reserved.tokens)) : 0,
+        in: inBy.PUSD ?? 0,
+        inBy,
         out: this.inventory.sats >= this.cfg.satsReserve ? Math.max(0, Math.min(this.cfg.swapMax, bal - (reserved.usdc.get(key) ?? 0))) : 0,
       };
     }
@@ -75,9 +82,10 @@ export class Engine {
       minFee: this.cfg.minFee,
       capacity,
       instantTierMax: this.cfg.instantMax,
-      inventory: { pusd, bchSats: this.inventory.sats.toString(), usdc },
+      inventory: { pusd, bchSats: this.inventory.sats.toString(), usdc, tokens: Object.fromEntries(symbols.map((t) => [t, held(t)])) },
       pusdCategory: this.cfg.tokenCategory,
-      version: '0.2.0',
+      tokens: symbols.map((symbol) => ({ symbol, category: this.cfg.tokens[symbol]! })),
+      version: '0.3.0',
     };
   }
 
@@ -85,8 +93,9 @@ export class Engine {
     const side = this.side(q.chain);
     if (!Number.isInteger(q.amount) || q.amount <= 0) throw new UserError('amount must be a positive number of cents');
     if (q.amount < this.cfg.minSwap) throw new UserError(`the smallest swap is ${this.cfg.minSwap} cents`);
+    const token = this.symbol(q.token);
     const info = await this.info();
-    const cap = info.capacity[q.chain]![q.direction];
+    const cap = q.direction === 'in' ? info.capacity[q.chain]!.inBy?.[token] ?? 0 : info.capacity[q.chain]!.out;
     if (q.amount > cap) throw new UserError(`the solver can fill at most ${cap} cents in this direction right now`);
     const fee = quoteFee(q.amount, this.cfg.feeBps, this.cfg.minFee);
     if (fee >= q.amount) throw new UserError('amount too small to cover the fee');
@@ -97,6 +106,8 @@ export class Engine {
       amountOut: q.amount - fee,
       fee,
       tier: q.amount <= this.cfg.instantMax ? 'instant' : 'confirmed',
+      token,
+      tokenCategory: this.cfg.tokens[token]!,
       expiresAt: now() + 600,
       solver: { bchAddress: this.bch.address, bchTokenAddress: this.bch.tokenAddress, evmAddress: side.address },
       htlc: side.chain.htlc,
@@ -125,21 +136,22 @@ export class Engine {
 
     const swap = await this.openLock.run(async () => {
       if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
-      const quote = await this.quote({ direction: 'in', chain: body.chain, amount: body.amount });
+      const quote = await this.quote({ direction: 'in', chain: body.chain, amount: body.amount, token: body.token });
       const record: SwapRecord = {
         id: secretHash, direction: 'in', chain: body.chain, status: 'awaiting_user_lock', tier: quote.tier,
-        amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, secretHash,
+        amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, token: quote.token, secretHash,
         user: { bchAddress: body.userBchAddress, evmAddress: body.userEvm },
         // The BCH lock's refund time (and so its address) is fixed when the solver actually locks.
         bch: {
           lockAddress: '', refundTime: 0,
           claimBytecode: binToHex(userBytecode), refundBytecode: binToHex(this.bch.bytecode), tokenAmount: quote.amountOut,
+          tokenCategory: quote.tokenCategory,
         },
         evm: {
           htlc: side.chain.htlc, lockId, refundTime: body.evmRefundTime, amount: amountUsdc.toString(),
           sender: body.userEvm, recipient: side.address, validBefore: body.validBefore,
         },
-        createdAt: t, updatedAt: t, timeline: [{ at: t, event: 'Swap opened: USDC -> PUSD', chain: body.chain }],
+        createdAt: t, updatedAt: t, timeline: [{ at: t, event: `Swap opened: USDC -> ${quote.token}`, chain: body.chain }],
       };
       // Relay inside the reservation so a bad signature fails the request and frees the capacity.
       const hash = await side.relayUserLock({
@@ -171,7 +183,8 @@ export class Engine {
       refundTime: BigInt(body.bchRefundTime),
     };
     // The lock must carry the full LOCK_SATS: our claim is keyless and pays its fee from them.
-    const expect = { category: this.cfg.tokenCategory, amount: BigInt(body.amount), minSats: LOCK_SATS, txid: body.lockTxid };
+    const token = this.symbol(body.token);
+    const expect = { category: this.cfg.tokens[token]!, amount: BigInt(body.amount), minSats: LOCK_SATS, txid: body.lockTxid };
     // The user's wallet broadcast through its own server; give propagation a moment before we decide.
     let sighting: LockSighting | undefined;
     for (let attempt = 0; attempt < 12 && !sighting; attempt++) {
@@ -189,16 +202,16 @@ export class Engine {
       if (this.store.get(secretHash)) throw new UserError('a swap with this secret hash already exists');
       // One swap per lock transaction: several locks under one memo would multiply 0-conf exposure.
       if (this.store.byLockTxid(body.lockTxid)) throw new UserError('this lock transaction already backs a swap');
-      const quote = await this.quote({ direction: 'out', chain: body.chain, amount: body.amount });
+      const quote = await this.quote({ direction: 'out', chain: body.chain, amount: body.amount, token });
       const amountUsdc = BigInt(quote.amountOut) * USDC_UNITS_PER_PUSD_UNIT;
       const record: SwapRecord = {
         id: secretHash, direction: 'out', chain: body.chain, status: 'user_locked', tier: quote.tier,
-        amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, secretHash,
+        amountIn: body.amount, amountOut: quote.amountOut, fee: quote.fee, token, secretHash,
         user: { bchAddress: body.userBchAddress, evmAddress: body.userEvm },
         bch: {
           lockAddress: this.bch.contract(bchParams).tokenAddress, refundTime: body.bchRefundTime,
           claimBytecode: binToHex(this.bch.bytecode), refundBytecode: binToHex(userBytecode), tokenAmount: body.amount,
-          lockTxid: body.lockTxid,
+          tokenCategory: expect.category, lockTxid: body.lockTxid,
         },
         // The EVM lock's refund time (and so its id) is fixed when the solver actually locks.
         evm: {
@@ -207,8 +220,8 @@ export class Engine {
         },
         createdAt: t, updatedAt: t,
         timeline: [
-          { at: t, event: 'Swap opened: PUSD -> USDC', chain: 'bch' },
-          { at: t, event: `Your PUSD is locked on Bitcoin Cash (${sighting!.confirmations} conf)`, chain: 'bch', txid: body.lockTxid },
+          { at: t, event: `Swap opened: ${token} -> USDC`, chain: 'bch' },
+          { at: t, event: `Your ${token} is locked on Bitcoin Cash (${sighting!.confirmations} conf)`, chain: 'bch', txid: body.lockTxid },
         ],
       };
       this.save(record);
@@ -311,7 +324,7 @@ export class Engine {
         swap.bch.spendTxid = found.txid;
         if (swap.status !== 'secret_revealed') {
           swap.status = 'secret_revealed';
-          this.log(swap, { event: 'You claimed your PUSD (the secret is now public)', chain: 'bch', txid: found.txid });
+          this.log(swap, { event: `You claimed your ${tk(swap)} (the secret is now public)`, chain: 'bch', txid: found.txid });
           this.save(swap);
         }
         const lock = await side.readLock(lockId);
@@ -337,7 +350,7 @@ export class Engine {
       swap.bch.spendTxid = txid;
       swap.bch.refunded = true;
       swap.status = 'refunding';
-      this.log(swap, { event: 'Timed out: solver PUSD lock refunded', chain: 'bch', txid });
+      this.log(swap, { event: `Timed out: solver ${tk(swap)} lock refunded`, chain: 'bch', txid });
       return this.save(swap);
     }
 
@@ -375,13 +388,13 @@ export class Engine {
     // Our persisted lock tx is known to the network: we are locked (even if already claimed).
     if (swap.bch.lockTxid && ((await this.bch.sight(params, this.bchExpect(swap))) || (await this.bch.txKnown(swap.bch.lockTxid)))) {
       swap.status = 'solver_locked';
-      this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: swap.bch.lockTxid });
+      this.log(swap, { event: `Solver locked ${tk(swap)} for you on Bitcoin Cash`, chain: 'bch', txid: swap.bch.lockTxid });
       return this.save(swap);
     }
     // Not on the network yet. Before any (re)broadcast, re-check that locking is still safe.
     const userLock = await side.readLock(swap.evm.lockId as Hex);
     if (userLock.state !== LockState.Open || swap.bch.refundTime - now() < SEND_DEADLINE) {
-      return this.abandonIn(swap, 'Could not lock PUSD in time');
+      return this.abandonIn(swap, `Could not lock ${tk(swap)} in time`);
     }
     if (swap.bch.lockHex) {
       if (swap.bch.lockAttemptAt && now() - swap.bch.lockAttemptAt < 30) return; // let the indexer catch up
@@ -401,14 +414,14 @@ export class Engine {
       }
       return;
     }
-    const built = await this.bch.buildTokenLock(params, BigInt(swap.bch.tokenAmount));
+    const built = await this.bch.buildTokenLock(params, BigInt(swap.bch.tokenAmount), this.categoryOf(swap));
     swap.bch.lockHex = built.hex;
     swap.bch.lockTxid = built.txid;
     swap.bch.lockAttemptAt = now();
     this.save(swap);
     await this.bch.broadcast(built.hex);
     swap.status = 'solver_locked';
-    this.log(swap, { event: 'Solver locked PUSD for you on Bitcoin Cash', chain: 'bch', txid: built.txid });
+    this.log(swap, { event: `Solver locked ${tk(swap)} for you on Bitcoin Cash`, chain: 'bch', txid: built.txid });
     return this.save(swap);
   }
 
@@ -449,7 +462,7 @@ export class Engine {
           // We must be able to claim the user's PUSD after they reveal, before their BCH refund opens.
           if (swap.bch.refundTime - refundTime < MIN_CLAIM_MARGIN) {
             swap.status = 'refunding';
-            this.log(swap, { event: 'Too close to your BCH refund time to lock safely; your PUSD refunds automatically', chain: 'bch' });
+            this.log(swap, { event: `Too close to your BCH refund time to lock safely; your ${tk(swap)} refunds automatically`, chain: 'bch' });
             this.save(swap);
             return false;
           }
@@ -470,7 +483,7 @@ export class Engine {
         if (swap.evm.lockAttemptAt && now() - swap.evm.lockAttemptAt < 90) return; // a send may still be in flight
         if (!sighting || swap.evm.refundTime - now() < SEND_DEADLINE) {
           swap.status = 'refunding';
-          this.log(swap, { event: 'Could not lock USDC in time; your PUSD refunds automatically', chain: 'bch' });
+          this.log(swap, { event: `Could not lock USDC in time; your ${tk(swap)} refunds automatically`, chain: 'bch' });
           return this.save(swap);
         }
         swap.evm.lockAttemptAt = now();
@@ -521,7 +534,7 @@ export class Engine {
         swap.bch.spendTxid = txid;
         swap.bch.refunded = true;
         swap.status = 'refunded';
-        this.log(swap, { event: 'Your PUSD was refunded to you', chain: 'bch', txid });
+        this.log(swap, { event: `Your ${tk(swap)} was refunded to you`, chain: 'bch', txid });
         return this.save(swap);
       }
       return;
@@ -540,14 +553,14 @@ export class Engine {
         return;
       }
       if (lock.state !== LockState.Claimed) {
-        this.log(swap, { event: 'USDC lock is not claimable; not collecting the PUSD', chain: swap.chain });
+        this.log(swap, { event: `USDC lock is not claimable; not collecting the ${tk(swap)}`, chain: swap.chain });
         swap.status = 'failed';
         return this.save(swap);
       }
       const txid = await this.bch.spend(bchParams, this.bchExpect(swap), 'claim', hexToBin(swap.secret));
       swap.bch.spendTxid = txid;
       swap.status = 'completed';
-      this.log(swap, { event: 'Solver collected the PUSD with the same secret. Swap complete.', chain: 'bch', txid });
+      this.log(swap, { event: `Solver collected the ${tk(swap)} with the same secret. Swap complete.`, chain: 'bch', txid });
       return this.save(swap);
     }
   }
@@ -597,7 +610,7 @@ export class Engine {
 
   private bchExpect(swap: SwapRecord) {
     return {
-      category: this.cfg.tokenCategory, amount: BigInt(swap.bch.tokenAmount), minSats: LOCK_SATS,
+      category: this.categoryOf(swap), amount: BigInt(swap.bch.tokenAmount), minSats: LOCK_SATS,
       txid: swap.bch.lockTxid,
     };
   }
@@ -616,15 +629,30 @@ export class Engine {
 
   private reserved() {
     const usdc = new Map<EvmChainKey, number>();
-    let tokens = 0;
+    const tokens = new Map<StableSymbol, number>();
     let inSwaps = 0;
     for (const s of this.store.open()) {
-      if (s.direction === 'in' && (s.status === 'awaiting_user_lock' || s.status === 'user_locked')) { tokens += s.amountOut; inSwaps++; }
+      if (s.direction === 'in' && (s.status === 'awaiting_user_lock' || s.status === 'user_locked')) {
+        tokens.set(tk(s), (tokens.get(tk(s)) ?? 0) + s.amountOut);
+        inSwaps++;
+      }
       if (s.direction === 'out' && s.status === 'user_locked') usdc.set(s.chain, (usdc.get(s.chain) ?? 0) + s.amountOut);
     }
     return { tokens, usdc, inSwaps };
   }
 
+  /** The token a request asks for, defaulting to PUSD; refuses tokens this solver doesn't trade. */
+  private symbol(t?: StableSymbol): StableSymbol {
+    const sym = t ?? 'PUSD';
+    if ((sym !== 'PUSD' && sym !== 'MUSD') || !Object.hasOwn(this.cfg.tokens, sym) || !this.cfg.tokens[sym]) {
+      throw new UserError(`this solver does not trade ${String(sym).slice(0, 12)}`);
+    }
+    return sym;
+  }
+  /** A swap's token category: recorded on the swap, or PUSD's for records from before MUSD support. */
+  private categoryOf(swap: SwapRecord): string {
+    return swap.bch.tokenCategory ?? this.cfg.tokens[tk(swap)] ?? this.cfg.tokenCategory;
+  }
   private async refreshInventory() {
     if (Date.now() - this.inventory.at < 5_000) return;
     const inv = await this.bch.inventory();
@@ -674,4 +702,9 @@ function userAddressBytecode(address: string): Uint8Array {
   } catch {
     throw new UserError('invalid Bitcoin Cash address');
   }
+}
+
+/** A swap's token symbol; PUSD for records from before MUSD support. */
+function tk(s: SwapRecord): StableSymbol {
+  return s.token ?? 'PUSD';
 }

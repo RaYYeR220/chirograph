@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWizardConnect } from '@wizardconnect/react';
 import type { Address, Hex } from 'viem';
-import type { Direction, EvmChainKey, Quote, SolverInfo, SwapRecord } from '@chirograph/sdk';
+import type { Direction, EvmChainKey, Quote, SolverInfo, StableSymbol, SwapRecord } from '@chirograph/sdk';
 import { scanWallet, type WalletSnapshot } from './bchWallet';
 import { LockState } from '@chirograph/sdk';
 import { checkQuote, claimEvmDirect, claimSwapIn, evmLockState, revealSwapOut, solver, startSwapIn, startSwapOut, storedSwap } from './swaps';
@@ -37,6 +37,12 @@ export function useBch(category: string | undefined) {
   }, [wc.manager, wc.state, category]);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { if (wc.state !== 'connected') setWallet(null); }, [wc.state]);
+  // Balances change under us (a swap lands, the user spends elsewhere): re-read them now and then.
+  useEffect(() => {
+    if (wc.state !== 'connected') return;
+    const t = setInterval(() => void refresh(), 20_000);
+    return () => clearInterval(t);
+  }, [wc.state, refresh]);
   return { wc, wallet, scanning, refresh };
 }
 
@@ -84,7 +90,7 @@ export function useSwapRunner(deps: {
   /** Swaps whose claim/reveal already succeeded in this tab: never act twice. */
   const handled = useRef(new Set<string>());
 
-  const start = useCallback(async (direction: Direction, chain: EvmChainKey, amount: number) => {
+  const start = useCallback(async (direction: Direction, chain: EvmChainKey, amount: number, token: StableSymbol = 'PUSD') => {
     const { info, bch, evmAddress } = deps;
     if (!info || !evmAddress) throw new Error('connect both wallets first');
     setError(null);
@@ -93,16 +99,18 @@ export function useSwapRunner(deps: {
     setStage('signing');
     setStarted(Date.now());
     try {
-      const quote: Quote = await solver.quote({ direction, chain, amount });
-      checkQuote(quote, { direction, chain, amount });
+      const quote: Quote = await solver.quote({ direction, chain, amount, token });
+      checkQuote(quote, { direction, chain, amount, token });
       if (deps.confirmQuote && !(await deps.confirmQuote(quote))) { setStage('idle'); return; }
+      // Time the swap from the moment the user agreed to the quote, not from the first click.
+      setStarted(Date.now());
       if (direction === 'in') {
         const target = deps.bchTarget ?? bch.wallet?.receive.tokenAddress;
-        if (!target) throw new Error('connect a Bitcoin Cash wallet to receive PUSD');
+        if (!target) throw new Error(`connect a Bitcoin Cash wallet to receive ${token}`);
         const s = await startSwapIn({ info, quote, userEvm: evmAddress, bchTokenAddress: target, signTypedData: deps.signTypedData });
         setId(s.id);
       } else {
-        if (!bch.wc.manager || !bch.wallet) throw new Error('connect a Bitcoin Cash wallet holding PUSD');
+        if (!bch.wc.manager || !bch.wallet) throw new Error(`connect a Bitcoin Cash wallet holding ${token}`);
         const s = await startSwapOut({ info, quote, manager: bch.wc.manager, wallet: bch.wallet, userEvm: evmAddress });
         setId(s.id);
       }

@@ -1,4 +1,4 @@
-import { EVM_CHAINS, type EvmChainKey, type BchNetwork } from '@chirograph/sdk';
+import { EVM_CHAINS, MUSD_CATEGORY, PUSD_CATEGORY, type EvmChainKey, type BchNetwork, type StableSymbol } from '@chirograph/sdk';
 import type { Address, Hex } from 'viem';
 
 function env(name: string, fallback?: string): string {
@@ -45,7 +45,10 @@ export interface SolverConfig {
   satsReserve: bigint;
   pollMs: number;
   /** Token category the solver trades on BCH (PUSD on mainnet, a test token on chipnet). */
+  /** PUSD's category (or the chipnet stand-in). */
   tokenCategory: string;
+  /** Every token this solver trades, by symbol. A symbol without a category is not offered. */
+  tokens: Partial<Record<StableSymbol, string>>;
   publicName: string;
 }
 
@@ -84,7 +87,19 @@ export function loadConfig(): SolverConfig {
     instantExposureMax: num('INSTANT_EXPOSURE_MAX_CENTS', 1_000),
     satsReserve: BigInt(num('SATS_RESERVE', 10_000)),
     pollMs: num('POLL_MS', 2_500),
-    tokenCategory: env('TOKEN_CATEGORY', '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544'),
+    tokenCategory: env('TOKEN_CATEGORY', PUSD_CATEGORY),
+    tokens: tokenMap(env('BCH_NETWORK', 'mainnet') as BchNetwork),
     publicName: env('SOLVER_NAME', 'Chirograph solver #1'),
   };
+}
+
+/**
+ * PUSD always; MUSD on mainnet unless MUSD_CATEGORY is set to an empty string. On chipnet both are
+ * test stand-ins: TOKEN_CATEGORY for PUSD and MUSD_CATEGORY for MUSD (MUSD is off when it is unset).
+ */
+function tokenMap(network: BchNetwork): Partial<Record<StableSymbol, string>> {
+  const pusd = (process.env.TOKEN_CATEGORY ?? PUSD_CATEGORY).toLowerCase();
+  const musdEnv = process.env.MUSD_CATEGORY;
+  const musd = musdEnv !== undefined ? musdEnv.toLowerCase() : network === 'mainnet' ? MUSD_CATEGORY : '';
+  return musd ? { PUSD: pusd, MUSD: musd } : { PUSD: pusd };
 }

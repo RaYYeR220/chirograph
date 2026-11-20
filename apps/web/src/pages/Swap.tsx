@@ -3,8 +3,8 @@ import { useAccount, useSignTypedData, useSwitchChain, useWriteContract } from '
 import { privateKeyToAccount } from 'viem/accounts';
 import { isAddress, type Address, type Hex } from 'viem';
 import { addressToBytecode } from '@chirograph/sdk';
-import { CONFIG } from '../lib/config';
-import type { Direction, EvmChainKey, Quote } from '@chirograph/sdk';
+import { CONFIG, TRUST } from '../lib/config';
+import type { Direction, EvmChainKey, Quote, StableSymbol } from '@chirograph/sdk';
 import { Page } from '../components/Shell';
 import { BchWalletRow, EvmWalletRow, WizardDialog } from '../components/Wallets';
 import { SwapProgress } from '../components/SwapProgress';
@@ -39,6 +39,7 @@ export function Swap({ id }: { id?: string }) {
   const [pasteEvm, setPasteEvm] = useState('');
 
   const [direction, setDirection] = useState<Direction>('in');
+  const [token, setToken] = useState<StableSymbol>('PUSD');
   const [chain, setChain] = useState<EvmChainKey | null>(null);
   const [amount, setAmount] = useState('1.00');
   const [showQr, setShowQr] = useState(false);
@@ -52,7 +53,10 @@ export function Swap({ id }: { id?: string }) {
   const activeChain = (chain ?? chains[0]?.key ?? 'base') as EvmChainKey;
   const cents = Math.round(Number(amount) * 100);
   const fee = Math.max(FEE.minCents, Math.ceil((cents * FEE.bps) / 10_000));
-  const cap = info?.capacity[activeChain]?.[direction] ?? 0;
+  const offered = (info?.tokens?.map((t) => t.symbol) ?? ['PUSD']) as StableSymbol[];
+  const capRow = info?.capacity[activeChain];
+  const cap = direction === 'in' ? capRow?.inBy?.[token] ?? (token === 'PUSD' ? capRow?.in ?? 0 : 0) : capRow?.out ?? 0;
+  const held = bch.wallet ? bch.wallet.tokensBy[TRUST.tokens[token]] ?? 0n : 0n;
 
   const deps = useMemo(() => ({
     info, bch, evmAddress, bchTarget: pastedBch ?? undefined,
@@ -76,8 +80,12 @@ export function Swap({ id }: { id?: string }) {
     shown.current = s.id;
     setDirection(s.direction);
     setChain(s.chain as EvmChainKey);
+    setToken(s.token ?? 'PUSD');
     setAmount((s.amountIn / 100).toFixed(2));
   }, [id, runner.swap]);
+  // A finished swap changed the wallet's balances: re-read them so the next swap sees the new amounts.
+  const swapStatus = runner.swap?.status;
+  useEffect(() => { if (swapStatus === 'completed' || swapStatus === 'refunded') void bch.refresh(); }, [swapStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const answer = useCallback((ok: boolean) => { decide.current?.(ok); decide.current = null; setPending(null); }, []);
 
@@ -85,16 +93,16 @@ export function Swap({ id }: { id?: string }) {
   const haveBch = direction === 'in' ? !!(bch.wallet || pastedBch) : !!bch.wallet;
   const haveEvm = direction === 'in' ? !!connectedEvm : !!evmAddress;
   const canStart = !!info && haveBch && haveEvm && cents >= 25 && cents <= cap && !busy
-    && (direction === 'in' || (bch.wallet?.tokens ?? 0n) >= BigInt(cents));
+    && (direction === 'in' || held >= BigInt(cents));
   const blocker = !info ? (solverError ? 'Solver unreachable right now.' : 'Connecting to the solver…')
-    : !haveBch ? (direction === 'in' ? 'Connect a Bitcoin Cash wallet, or paste the address that should receive PUSD.' : 'Connect the Bitcoin Cash wallet that holds your PUSD.')
+    : !haveBch ? (direction === 'in' ? `Connect a Bitcoin Cash wallet, or paste the address that should receive ${token}.` : `Connect the Bitcoin Cash wallet that holds your ${token}.`)
       : !haveEvm ? (direction === 'in' ? 'Connect the EVM wallet that holds your USDC.' : 'Connect an EVM wallet, or paste the address that should receive USDC.')
         : cents < 25 ? 'The smallest swap is $0.25.'
           : cents > cap ? `The solver can fill up to $${(cap / 100).toFixed(2)} in this direction right now.`
-            : direction === 'out' && ((bch.wallet?.tokens ?? 0n) < BigInt(cents)) ? 'Not enough PUSD in this wallet.' : null;
+            : direction === 'out' && held < BigInt(cents) ? `Not enough ${token} in this wallet.` : null;
 
-  const from = direction === 'in' ? 'USDC' : 'PUSD';
-  const to = direction === 'in' ? 'PUSD' : 'USDC';
+  const from = direction === 'in' ? 'USDC' : token;
+  const to = direction === 'in' ? token : 'USDC';
   const fromChain = direction === 'in' ? chainName(activeChain) : 'Bitcoin Cash';
   const toChain = direction === 'in' ? 'Bitcoin Cash' : chainName(activeChain);
 
@@ -107,13 +115,18 @@ export function Swap({ id }: { id?: string }) {
       <div className="app-grid">
         <div className="card card-pad">
           <div className="seg" role="group" aria-label="Direction">
-            <button type="button" aria-pressed={direction === 'in'} disabled={busy} onClick={() => setDirection('in')}>USDC → PUSD</button>
-            <button type="button" aria-pressed={direction === 'out'} disabled={busy} onClick={() => setDirection('out')}>PUSD → USDC</button>
+            <button type="button" aria-pressed={direction === 'in'} disabled={busy} onClick={() => setDirection('in')}>USDC → {token}</button>
+            <button type="button" aria-pressed={direction === 'out'} disabled={busy} onClick={() => setDirection('out')}>{token} → USDC</button>
           </div>
 
           <div className="leg">
             <div className="leg-top">
               <span className="label">You send · {fromChain}</span>
+              {direction === 'out' ? (offered.length > 1 ? (
+                <span className="chainpick" role="group" aria-label="Bitcoin Cash dollar">{offered.map((t) => (
+                  <button key={t} type="button" className="chip" aria-pressed={token === t} disabled={busy} onClick={() => setToken(t)}><span className="dot" />{t}</button>
+                ))}</span>
+              ) : null) : null}
               {direction === 'in' ? (
                 <span className="chainpick">{chains.map((c) => (
                   <button key={c.key} type="button" className="chip" aria-pressed={activeChain === c.key} disabled={busy} onClick={() => setChain(c.key)}><span className="dot" />{chainName(c.key)}</button>
@@ -132,6 +145,11 @@ export function Swap({ id }: { id?: string }) {
           <div className="leg">
             <div className="leg-top">
               <span className="label">You receive · {toChain}</span>
+              {direction === 'in' ? (offered.length > 1 ? (
+                <span className="chainpick" role="group" aria-label="Bitcoin Cash dollar">{offered.map((t) => (
+                  <button key={t} type="button" className="chip" aria-pressed={token === t} disabled={busy} onClick={() => setToken(t)}><span className="dot" />{t}</button>
+                ))}</span>
+              ) : null) : null}
               {direction === 'out' ? (
                 <span className="chainpick">{chains.map((c) => (
                   <button key={c.key} type="button" className="chip" aria-pressed={activeChain === c.key} disabled={busy} onClick={() => setChain(c.key)}><span className="dot" />{chainName(c.key)}</button>
@@ -151,7 +169,7 @@ export function Swap({ id }: { id?: string }) {
           <div className="wallets">
             <BchWalletRow bch={bch} onConnect={() => setShowQr(true)} />
             {direction === 'in' && !bch.wallet ? (
-              <input className="paste" spellCheck={false} placeholder={`or paste a ${bchPrefix}… address to receive PUSD`} aria-label="Bitcoin Cash address to receive PUSD"
+              <input className="paste" spellCheck={false} placeholder={`or paste a ${bchPrefix}… address to receive ${token}`} aria-label={`Bitcoin Cash address to receive ${token}`}
                 value={pasteBch} disabled={busy} onChange={(e) => setPasteBch(e.target.value)} aria-invalid={!!pasteBch && !pastedBch} />
             ) : null}
             <EvmWalletRow chainId={chainIdOf(activeChain)} devAddress={devAccount?.address} />
@@ -176,14 +194,14 @@ export function Swap({ id }: { id?: string }) {
             </div>
           ) : (
             <button className="btn ink wide" style={{ marginTop: 16 }} type="button" disabled={!canStart}
-              onClick={() => void runner.start(direction, activeChain, cents)}>
+              onClick={() => void runner.start(direction, activeChain, cents, token)}>
               {busy ? 'Swapping…' : `Swap ${from} → ${to}`}
             </button>
           )}
           {blocker && !busy ? <div className="notice info">{blocker}</div> : null}
         </div>
 
-        <SwapProgress swap={runner.swap} stage={runner.stage} error={runner.error} note={runner.note} started={runner.started} fundsAt={runner.fundsAt} plan={direction} />
+        <SwapProgress swap={runner.swap} stage={runner.stage} error={runner.error} note={runner.note} started={runner.started} fundsAt={runner.fundsAt} plan={direction} planAmount={cents} planToken={token} />
       </div>
       {showQr && bch.wc.state !== 'connected' ? <WizardDialog bch={bch} onClose={() => setShowQr(false)} /> : null}
     </Page>

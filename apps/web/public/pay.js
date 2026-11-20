@@ -4,19 +4,22 @@
  *   <script src="https://<app>/pay.js"
  *           data-to="bitcoincash:z..."      // where the PUSD should land (token-aware address)
  *           data-amount="2.50"             // price in dollars
- *           data-label="Order 1042"></script>
+ *           data-label="Order 1042"
+ *           data-token="PUSD"></script>        // PUSD (default) or MUSD
  *
  * Renders a button; clicking it opens the Chirograph checkout in a modal. The payer signs one USDC
- * authorization on Base or Arbitrum and the merchant receives PUSD on Bitcoin Cash. The page is told
+ * authorization on Base or Arbitrum and the merchant receives PUSD (or MUSD) on Bitcoin Cash. The page is told
  * about the result through a `chirograph:paid` DOM event on the script's button.
  */
 (function () {
   var script = document.currentScript;
-  if (!script) return;
+  // The host page may have removed the tag before it ran (frameworks re-render); then there is nowhere to draw.
+  if (!script || !script.parentNode) return;
   var origin = new URL(script.src).origin;
   var to = script.getAttribute('data-to') || '';
   var amount = script.getAttribute('data-amount') || '';
   var label = script.getAttribute('data-label') || '';
+  var token = (script.getAttribute('data-token') || 'PUSD').toUpperCase() === 'MUSD' ? 'MUSD' : 'PUSD';
   if (!/^(bitcoincash|bchtest):[zrqp][a-z0-9]{40,}$/.test(to) || !/^\d+(\.\d{1,2})?$/.test(amount)) {
     console.warn('[chirograph] pay.js needs data-to (cashaddr) and data-amount (dollars, 2 decimals)');
     return;
@@ -35,7 +38,7 @@
   }
   button.addEventListener('click', function () {
     var url = origin + '/pay?to=' + encodeURIComponent(to) + '&amount=' + encodeURIComponent(amount) +
-      '&label=' + encodeURIComponent(label) + '&embed=1';
+      '&label=' + encodeURIComponent(label) + '&token=' + token + '&embed=1';
     overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(10,10,10,.45);display:flex;align-items:center;justify-content:center;padding:16px';
     var frame = document.createElement('iframe');

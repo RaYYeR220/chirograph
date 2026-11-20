@@ -34,6 +34,8 @@ export interface WalletSnapshot {
   utxos: WalletUtxo[];
   sats: bigint;
   tokens: bigint;
+  /** Fungible token balance per category (base units). */
+  tokensBy: Record<string, bigint>;
   /** Where we ask solvers to pay PUSD (receive chain, index 0). */
   receive: WalletAddress;
 }
@@ -69,11 +71,13 @@ export async function scanWallet(manager: DappConnectionManager, category: strin
   const utxos = perAddress.flat();
   let sats = 0n;
   let tokens = 0n;
+  const tokensBy: Record<string, bigint> = {};
   for (const u of utxos) {
     sats += u.satoshis;
     if (u.token?.category === category && !u.token.nft) tokens += u.token.amount;
+    if (u.token && !u.token.nft) tokensBy[u.token.category] = (tokensBy[u.token.category] ?? 0n) + u.token.amount;
   }
-  return { addresses, utxos, sats, tokens, receive: addresses[0]! };
+  return { addresses, utxos, sats, tokens, tokensBy, receive: addresses[0]! };
 }
 
 /**

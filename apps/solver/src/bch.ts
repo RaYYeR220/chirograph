@@ -43,11 +43,11 @@ export class BchSide {
 
   async inventory() {
     const utxos = await this.provider.getUtxos(this.address);
-    let tokens = 0n;
+    const tokens = new Map<string, bigint>();
     let sats = 0n;
     for (const u of utxos) {
       sats += u.satoshis;
-      if (u.token?.category === this.cfg.tokenCategory && !u.token.nft) tokens += u.token.amount;
+      if (u.token && !u.token.nft) tokens.set(u.token.category, (tokens.get(u.token.category) ?? 0n) + u.token.amount);
     }
     return { tokens, sats, utxos: utxos.length };
   }
@@ -57,7 +57,7 @@ export class BchSide {
    * wallet. The caller persists the hex before broadcasting, so a retry re-sends the exact same
    * transaction instead of building a second lock.
    */
-  async buildTokenLock(params: BchLockParams, amount: bigint): Promise<{ hex: string; txid: string; lockAddress: string }> {
+  async buildTokenLock(params: BchLockParams, amount: bigint, category: string): Promise<{ hex: string; txid: string; lockAddress: string }> {
     return this.walletLock.run(async () => {
       const contract = this.contract(params);
       const utxos = await this.provider.getUtxos(this.address);
@@ -66,7 +66,7 @@ export class BchSide {
         contract,
         utxos,
         unlocker: this.signer.unlockP2PKH(),
-        token: { category: this.cfg.tokenCategory, amount },
+        token: { category, amount },
         changeAddress: this.tokenAddress,
       });
       const hex = builder.build();

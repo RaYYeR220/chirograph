@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { SwapRecord } from '@chirograph/sdk';
+import type { StableSymbol, SwapRecord } from '@chirograph/sdk';
 import { BCH_TX_URL } from '../lib/config';
 import { EVM_TX_URL } from '../lib/evm';
 import type { RunnerStage } from '../lib/hooks';
@@ -18,29 +18,33 @@ function stepsFor(s: SwapRecord): Step[] {
   const evm = (h?: string) => (h ? { href: EVM_TX_URL(cid, h), label: `${chainName(s.chain)} tx ↗` } : undefined);
   const bch = (h?: string) => (h ? { href: BCH_TX_URL(h), label: 'BCH tx ↗' } : undefined);
   const out = (s.amountOut / 100).toFixed(2), inn = (s.amountIn / 100).toFixed(2);
+  const T = s.token ?? 'PUSD';
   if (s.direction === 'in') {
     return [
       { title: 'You signed once', detail: `Authorized ${inn} USDC into the escrow. The relayer paid the gas.` },
       { title: `USDC locked on ${chainName(s.chain)}`, detail: 'Refunds to you after 4 h if anything stalls.', link: evm(s.evm.lockTx) },
-      { title: 'PUSD locked for you on Bitcoin Cash', detail: `${out} PUSD under the same hash, in a keyless covenant only your address can receive.`, link: bch(s.bch.lockTxid) },
-      { title: 'You claimed your PUSD', detail: 'Your browser checked the lock, then claimed it with no key. The secret is now public.', link: bch(s.bch.spendTxid) },
+      { title: `${T} locked for you on Bitcoin Cash`, detail: `${out} ${T} under the same hash, in a keyless covenant only your address can receive.`, link: bch(s.bch.lockTxid) },
+      { title: `You claimed your ${T}`, detail: 'Your browser checked the lock, then claimed it with no key. The secret is now public.', link: bch(s.bch.spendTxid) },
       { title: 'Settled', detail: 'The solver reused the secret to collect the USDC.', link: evm(s.evm.spendTx) },
     ];
   }
   return [
-    { title: 'You signed once', detail: `Your wallet locked ${inn} PUSD and named this USDC address in the same transaction.`, link: bch(s.bch.lockTxid) },
-    { title: 'PUSD lock seen on Bitcoin Cash', detail: 'Refunds to you after 4 h if anything stalls. Instant tier: 4 s double-spend-proof window.' },
+    { title: 'You signed once', detail: `Your wallet locked ${inn} ${T} and named this USDC address in the same transaction.`, link: bch(s.bch.lockTxid) },
+    { title: `${T} lock seen on Bitcoin Cash`, detail: 'Refunds to you after 4 h if anything stalls. Instant tier: 4 s double-spend-proof window.' },
     { title: `USDC locked for you on ${chainName(s.chain)}`, detail: `${out} USDC under the same hash; your browser verified it on-chain.`, link: evm(s.evm.lockTx) },
     { title: 'Your USDC claimed to you', detail: 'Secret revealed only after the checks passed. The relayer paid the gas.', link: evm(s.evm.spendTx) },
-    { title: 'Settled', detail: 'The solver reused the secret to collect the PUSD.', link: bch(s.bch.spendTxid) },
+    { title: 'Settled', detail: `The solver reused the secret to collect the ${T}.`, link: bch(s.bch.spendTxid) },
   ];
 }
 
 /** A placeholder swap used only to render the plan before anything starts. */
-function planSwap(direction: 'in' | 'out'): SwapRecord {
+function planSwap(direction: 'in' | 'out', amount: number, token: StableSymbol): SwapRecord {
+  const amountIn = amount > 0 ? amount : 100;
+  const fee = Math.max(1, Math.ceil((amountIn * 30) / 10_000));
+  const amountOut = Math.max(0, amountIn - fee);
   return {
-    id: '', direction, chain: 'base', status: 'awaiting_user_lock', tier: 'instant', amountIn: 100, amountOut: 99, fee: 1, secretHash: '',
-    user: {}, bch: { lockAddress: '', refundTime: 0, claimBytecode: '', refundBytecode: '', tokenAmount: 99 },
+    id: '', direction, chain: 'base', status: 'awaiting_user_lock', tier: 'instant', amountIn, amountOut, fee, token, secretHash: '',
+    user: {}, bch: { lockAddress: '', refundTime: 0, claimBytecode: '', refundBytecode: '', tokenAmount: amountOut },
     evm: { htlc: '', lockId: '', refundTime: 0, amount: '0', sender: '', recipient: '' }, createdAt: 0, updatedAt: 0, timeline: [],
   };
 }
@@ -51,9 +55,11 @@ function progressIndex(s: SwapRecord): number {
   return s.direction === 'out' ? Math.min(4, base === 0 ? 0 : base + 1) : base;
 }
 
-export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan }: {
+export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan, planAmount = 0, planToken = 'PUSD' }: {
   swap: SwapRecord | null; stage: RunnerStage; error: string | null; note: string | null; started: number | null;
   fundsAt?: number | null; plan?: 'in' | 'out';
+  /** What the user has typed so far (cents in, and which token), for the plan shown before a swap starts. */
+  planAmount?: number; planToken?: StableSymbol;
 }) {
   const [now, setNow] = useState(Date.now());
   const done = swap?.status === 'completed';
@@ -77,8 +83,8 @@ export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan 
     <div className="card card-pad" aria-live="polite">
       <div className="status-head">
         <div>
-          <div className="label">{swap ? (swap.direction === 'in' ? 'USDC → PUSD' : 'PUSD → USDC') : 'Your swap'}</div>
-          <div className="big">{swap ? `${(swap.amountOut / 100).toFixed(2)} ${swap.direction === 'in' ? 'PUSD' : 'USDC'}` : '—'}</div>
+          <div className="label">{swap ? (swap.direction === 'in' ? `USDC → ${swap.token ?? 'PUSD'}` : `${swap.token ?? 'PUSD'} → USDC`) : 'Your swap'}</div>
+          <div className="big">{swap ? `${(swap.amountOut / 100).toFixed(2)} ${swap.direction === 'in' ? swap.token ?? 'PUSD' : 'USDC'}` : '—'}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
           {done ? <span className="badge ok">Done</span>
@@ -92,7 +98,7 @@ export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan 
 
       {arrivedAt && started ? (
         <div className="notice info" style={{ marginTop: 0, marginBottom: 6, fontSize: 15 }}>
-          Your {swap?.direction === 'out' ? 'USDC' : 'PUSD'} arrived <b className="mono" style={{ color: 'var(--ink)' }}>{((arrivedAt - started) / 1000).toFixed(1)} s</b> after you clicked. One signature.
+          Your {swap?.direction === 'out' ? 'USDC' : swap?.token ?? 'PUSD'} arrived <b className="mono" style={{ color: 'var(--ink)' }}>{((arrivedAt - started) / 1000).toFixed(1)} s</b> after you clicked. One signature.
         </div>
       ) : null}
       {swap ? (
@@ -109,7 +115,7 @@ export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan 
         <>
           <p className="d" style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 6px' }}>You sign once. Everything below then happens on its own, and each step links to its transaction.</p>
           <ol className="tl">
-            {stepsFor(planSwap(plan ?? 'in')).map((s, i) => (
+            {stepsFor(planSwap(plan ?? 'in', planAmount, planToken)).map((s, i) => (
               <li key={i}><span className="m" /><div><div className="t">{s.title}</div><div className="d">{s.detail}</div></div><div /></li>
             ))}
           </ol>
@@ -118,7 +124,7 @@ export function SwapProgress({ swap, stage, error, note, started, fundsAt, plan 
 
       {refunding && swap ? (
         <div className="notice info">
-          Nothing was lost. Each side's lock returns to its owner after its timeout. Your {swap.direction === 'in' ? 'USDC refunds' : 'PUSD refunds'} after{' '}
+          Nothing was lost. Each side's lock returns to its owner after its timeout. Your {swap.direction === 'in' ? 'USDC refunds' : `${swap.token ?? 'PUSD'} refunds`} after{' '}
           {new Date((swap.direction === 'in' ? swap.evm.refundTime : swap.bch.refundTime) * 1000).toLocaleTimeString()}; the solver's watchtower executes it for you, and anyone can.
         </div>
       ) : null}
