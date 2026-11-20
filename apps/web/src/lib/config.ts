@@ -13,9 +13,9 @@ export const CONFIG = {
     42161: env.VITE_ARBITRUM_RPC as string | undefined,
   } as Record<number, string | undefined>,
   /** BLAZE banner links. */
-  deckUrl: (env.VITE_DECK_URL as string | undefined) ?? '#',
-  repoUrl: (env.VITE_REPO_URL as string | undefined) ?? '#',
-  emberAddress: (env.VITE_EMBER_ADDRESS as string | undefined) ?? '',
+  deckUrl: (env.VITE_DECK_URL as string | undefined) ?? '/deck/',
+  repoUrl: (env.VITE_REPO_URL as string | undefined) ?? 'https://github.com/RaYYeR220/chirograph',
+  emberAddress: (env.VITE_EMBER_ADDRESS as string | undefined) ?? 'bitcoincash:zq504stpc4fz0q3dcay8p4na53ldvwq7zumxazktwt',
 };
 
 export const BCH_TX_URL = (txid: string) =>
