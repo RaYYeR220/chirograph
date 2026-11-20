@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount, useSignTypedData, useSwitchChain, useWriteContract } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
 import { isAddress, type Address, type Hex } from 'viem';
@@ -68,6 +68,16 @@ export function Swap({ id }: { id?: string }) {
     },
   }), [info, bch, evmAddress, pastedBch, signTypedDataAsync, switchChainAsync, writeContractAsync]);
   const runner = useSwapRunner(deps as never, id ?? null);
+  // Opening a swap by link: show its own direction, chain and amount in the form.
+  const shown = useRef<string | null>(null);
+  useEffect(() => {
+    const s = runner.swap;
+    if (!id || !s || shown.current === s.id) return;
+    shown.current = s.id;
+    setDirection(s.direction);
+    setChain(s.chain as EvmChainKey);
+    setAmount((s.amountIn / 100).toFixed(2));
+  }, [id, runner.swap]);
 
   const answer = useCallback((ok: boolean) => { decide.current?.(ok); decide.current = null; setPending(null); }, []);
 
