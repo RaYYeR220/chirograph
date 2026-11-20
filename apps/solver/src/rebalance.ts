@@ -15,10 +15,15 @@ import type { EvmSide } from './evm.js';
 
 export const THORNODE = process.env.THORNODE_URL ?? 'https://gateway.liquify.com/chain/thorchain_api';
 /**
- * Extra THORNodes to cross-check vault addresses against (comma-separated base URLs). A quote is only
- * acted on if every node lists the same vault and router for the source chain.
+ * THORNodes run by different operators, all of which must agree on halt flags, the vault and the router
+ * before anything is sent. Override the extra nodes with THORNODE_CHECK_URLS (comma-separated).
  */
-const CHECK_NODES = [THORNODE, ...(process.env.THORNODE_CHECK_URLS ?? '').split(',').map((u) => u.trim()).filter(Boolean)];
+const CHECK_NODES = [...new Set([
+  THORNODE,
+  ...(process.env.THORNODE_CHECK_URLS ?? 'https://thorchain-thornode-lb-1.thorwallet.org').split(',').map((u) => u.trim()).filter(Boolean),
+])];
+/** Largest disagreement tolerated between the two independent BCH/USD prices. */
+const PRICE_AGREEMENT = 0.02;
 /** THORChain's router on Base. Pinned: a quote naming any other router is refused before any approval. */
 export const THOR_BASE_ROUTER = (process.env.THOR_BASE_ROUTER ?? '0x00dc6100103BC402d490aEE3F9a5560cBd91f1d4').toLowerCase();
 /** Short asset codes THORChain may use in memos. */
@@ -53,13 +58,29 @@ async function thor<T>(path: string, node = THORNODE): Promise<T> {
   return body;
 }
 
-/** Halt flags for the chains a route touches, straight from THORChain's inbound addresses. */
+/** Halt flags for the chains a route touches. A chain counts as halted if any check node says so. */
 export async function routeStatus(chains: string[]): Promise<RouteStatus[]> {
-  const inbound = await thor<{ chain: string; halted?: boolean; chain_trading_paused?: boolean }[]>('inbound_addresses');
+  const lists = await Promise.all(CHECK_NODES.map((n) => thor<{ chain: string; halted?: boolean; chain_trading_paused?: boolean }[]>('inbound_addresses', n)));
   return chains.map((chain) => {
-    const c = inbound.find((i) => i.chain === chain);
-    return { chain, halted: !c || !!c.halted, tradingPaused: !c || !!c.chain_trading_paused };
+    const cs = lists.map((l) => l.find((i) => i.chain === chain));
+    return { chain, halted: cs.some((c) => !c || !!c.halted), tradingPaused: cs.some((c) => !c || !!c.chain_trading_paused) };
   });
+}
+
+/**
+ * BCH/USD from two sources outside THORChain. Both must answer and agree within 2%, or nothing is sent:
+ * the price floor for a rebalance must not come from the same place as the quote it is checking.
+ */
+export async function bchUsd(): Promise<number> {
+  const [gecko, kraken] = await Promise.all([
+    fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd').then((r) => r.json())
+      .then((d: { 'bitcoin-cash'?: { usd?: number } }) => d['bitcoin-cash']?.usd),
+    fetch('https://api.kraken.com/0/public/Ticker?pair=BCHUSD').then((r) => r.json())
+      .then((d: { result?: Record<string, { c?: string[] }> }) => Number(Object.values(d.result ?? {})[0]?.c?.[0])),
+  ]);
+  if (!gecko || !kraken || !Number.isFinite(kraken)) throw new Error('no independent BCH/USD price');
+  if (Math.abs(gecko - kraken) / kraken > PRICE_AGREEMENT) throw new Error(`BCH/USD sources disagree: ${gecko} vs ${kraken}`);
+  return (gecko + kraken) / 2;
 }
 
 /** Price a swap. `toleranceBps` bounds the total shortfall (fees plus slippage) baked into the memo. */
@@ -88,12 +109,18 @@ export async function plan(direction: Direction, amountIn1e8: bigint, bch: BchSi
   const [from, to, destination] = direction === 'bch-to-base'
     ? [THOR_ASSETS.bch, THOR_ASSETS.baseUsdc, base.account.address]
     : [THOR_ASSETS.baseUsdc, THOR_ASSETS.bch, bch.address.replace(/^bitcoincash:/, '')];
+  if (CHECK_NODES.length < 2) throw new Error('at least two independent THORNodes are required (THORNODE_URL plus THORNODE_CHECK_URLS)');
   const q = await quote(from, to, amountIn1e8, destination, maxFeeBps);
+  // What the input is worth in the output asset at an outside price (USDC counted as $1).
+  const price = await bchUsd();
+  const fairOut1e8 = direction === 'bch-to-base'
+    ? BigInt(Math.floor(Number(amountIn1e8) * price))
+    : BigInt(Math.floor(Number(amountIn1e8) / price));
   if (q.recommended_min_amount_in && amountIn1e8 < BigInt(q.recommended_min_amount_in)) {
     throw new Error(`amount below THORChain's recommended minimum of ${q.recommended_min_amount_in} (1e8 units)`);
   }
   if (q.fees.total_bps > maxFeeBps) throw new Error(`fees ${q.fees.total_bps} bps exceed the cap of ${maxFeeBps} bps`);
-  await checkQuote(q, direction === 'bch-to-base' ? 'BCH' : 'BASE', to, destination, maxFeeBps);
+  await checkQuote(q, direction === 'bch-to-base' ? 'BCH' : 'BASE', to, destination, maxFeeBps, fairOut1e8);
   return { direction, amountIn1e8, quote: q, feeBps: q.fees.total_bps };
 }
 
@@ -103,7 +130,7 @@ export async function plan(direction: Direction, amountIn1e8: bigint, bch: BchSi
  * memo must swap into the asset we asked for, pay only our own address, and carry a price limit no
  * looser than the fee cap.
  */
-export async function checkQuote(q: ThorQuote, sourceChain: 'BCH' | 'BASE', toAsset: string, destination: string, maxFeeBps: number) {
+export async function checkQuote(q: ThorQuote, sourceChain: 'BCH' | 'BASE', toAsset: string, destination: string, maxFeeBps: number, fairOut1e8: bigint) {
   const norm = (a: string) => a.trim().toLowerCase().replace(/^bitcoincash:/, '');
   const lists = await Promise.all(CHECK_NODES.map((n) => thor<{ chain: string; address: string; router?: string }[]>('inbound_addresses', n)));
   for (const [i, list] of lists.entries()) {
@@ -113,16 +140,25 @@ export async function checkQuote(q: ThorQuote, sourceChain: 'BCH' | 'BASE', toAs
   }
   if (sourceChain === 'BASE' && norm(q.router ?? '') !== THOR_BASE_ROUTER) throw new Error(`router ${q.router} is not the pinned THORChain router ${THOR_BASE_ROUTER}`);
 
-  const [action, asset, dest, limitField] = q.memo.split(':');
+  const fields = q.memo.split(':');
+  // Exactly action:asset:destination:limit. A fifth field would be an affiliate, which we never add.
+  if (fields.length !== 4) throw new Error(`memo must have exactly four fields: ${q.memo}`);
+  const [action, asset, dest, limitField] = fields;
   if (!['=', 's', 'swap'].includes((action ?? '').toLowerCase())) throw new Error(`memo is not a swap: ${q.memo}`);
   const assetOk = [toAsset, toAsset.split('-')[0], SHORT_CODES[toAsset]].filter(Boolean).map((a) => a!.toLowerCase()).includes((asset ?? '').toLowerCase());
   if (!assetOk) throw new Error(`memo swaps into ${asset}, expected ${toAsset}`);
   if (norm(dest ?? '') !== norm(destination)) throw new Error(`memo pays ${dest}, expected our own address ${destination}`);
-  const limitText = (limitField ?? '').split('/')[0] ?? '';
+  // LIMIT, or LIMIT/INTERVAL/QUANTITY for a streaming swap: at most 3 blocks apart, quantity chosen by THORChain.
+  const [limitText = '', interval, quantity, ...extra] = (limitField ?? '').split('/');
+  if (extra.length || (interval !== undefined && !(/^\d+$/.test(interval) && Number(interval) <= 3 && quantity === '0'))) {
+    throw new Error(`unexpected streaming parameters in memo: ${limitField}`);
+  }
   const m = /^(\d+)(?:e(\d+))?$/i.exec(limitText);
   const limit = m ? BigInt(m[1]!) * 10n ** BigInt(m[2] ?? 0) : 0n;
-  const floor = (BigInt(q.expected_amount_out) * BigInt(10_000 - maxFeeBps)) / 10_000n;
-  if (limit === 0n || limit < floor) throw new Error(`memo price limit ${limitText || 'missing'} is below ${floor} (expected output less the fee cap)`);
+  // The floor comes from the outside price, not from the quote being checked.
+  const floor = (fairOut1e8 * BigInt(10_000 - maxFeeBps)) / 10_000n;
+  if (BigInt(q.expected_amount_out) < floor) throw new Error(`quoted output ${q.expected_amount_out} is below ${floor} (fair value less the fee cap)`);
+  if (limit === 0n || limit < floor) throw new Error(`memo price limit ${limitText || 'missing'} is below ${floor} (fair value less the fee cap)`);
 }
 
 /** Send the inbound transaction for a plan. Returns the inbound transaction id to track. */
