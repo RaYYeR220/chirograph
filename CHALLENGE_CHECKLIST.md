@@ -27,4 +27,4 @@
 | USDC on another chain ↔ PUSD on BCH | Base and Arbitrum ↔ PUSD, both directions, on mainnet ([PROOF.md](PROOF.md)) |
 | WizardConnect on the BCH side | Swap and checkout pages |
 | A standard wallet connection on the EVM side | wagmi connectors on the swap page |
-| Stretch: route through THORChain | Today's THORChain route is the measured baseline in [README.md](README.md#mainnet-measured). Rebalancing between chains is manual and goes through Cauldron or THORChain |
+| Stretch: route through THORChain | The solver rebalances inventory between BCH and Base through THORChain: [`src/rebalance.ts`](apps/solver/src/rebalance.ts) (vault deposit with memo, router `depositWithExpiry`, halt check, fee cap, status tracking) and [`scripts/rebalance.ts`](apps/solver/scripts/rebalance.ts). THORChain had Base halted on 20 Nov ([snapshot](proof/thorchain-status-2026-11-20.json)), so it refuses to send. THORChain is also the measured baseline in [README.md](README.md#mainnet-measured) |

@@ -1,0 +1,78 @@
+{
+  "fetchedAt": "2026-11-20T07:59:36+00:00",
+  "source": "https://gateway.liquify.com/chain/thorchain_api/thorchain/",
+  "inbound": [
+    {
+      "chain": "AVAX",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "BASE",
+      "halted": true,
+      "chain_trading_paused": true
+    },
+    {
+      "chain": "BCH",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "BSC",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "BTC",
+      "halted": true,
+      "chain_trading_paused": true
+    },
+    {
+      "chain": "DOGE",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "ETH",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "GAIA",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "LTC",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "SOL",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "TRON",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "XRP",
+      "halted": false,
+      "chain_trading_paused": false
+    },
+    {
+      "chain": "ZEC",
+      "halted": false,
+      "chain_trading_paused": false
+    }
+  ],
+  "mimirHalts": {
+    "HALTBASETRADING": 1,
+    "HALTBTCTRADING": 1,
+    "HALTSIGNINGBTC": 1,
+    "HALTTRRONTRADING": 1,
+    "HALTWASMGLOBAL": 1
+  }
+}

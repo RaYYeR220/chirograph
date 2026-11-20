@@ -36,6 +36,11 @@ For comparison, the route people use today is THORChain plus a Cauldron swap. Fo
 THORChain's quote API (`total_swap_seconds`, `fees.total_bps`). They are labelled MODELED in
 [CLAIMS.md](CLAIMS.md).
 
+On 20 November 2026 even that route was closed. THORChain had trading on Base halted
+(`HALTBASETRADING=1`; see the [snapshot](proof/thorchain-status-2026-11-20.json)), and it does not
+support Arbitrum. Chirograph has no shared bridge or pool that can halt: each swap is two locks and one
+secret.
+
 <!-- swaps:start -->
 | # | When (UTC) | Swap | Chain | In → out | To funds | Settled | Transactions, in order |
 |---|---|---|---|---|---|---|---|
@@ -162,7 +167,10 @@ Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver.
   refunds.
 - **0-conf is a risk the solver takes, not you.** The cap and the DSProof window limit that risk; they
   don't remove it.
-- **Rebalancing between chains is manual** (a swap on Cauldron or THORChain).
+- **Rebalancing goes through THORChain, and it was halted.** [`scripts/rebalance.ts`](apps/solver/scripts/rebalance.ts)
+  moves inventory between BCH and Base through THORChain's vaults and router. It checks THORChain's halt
+  flags and a fee cap before it sends anything. On 20 November THORChain had Base halted, so no
+  rebalance has run yet.
 
 The full list is in [docs/PROTOCOL.md](docs/PROTOCOL.md#honest-limits).
 

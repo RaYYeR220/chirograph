@@ -1,0 +1,147 @@
+// Rebalancing inventory between Bitcoin Cash and Base through THORChain.
+//
+// A solver that fills USDC -> PUSD swaps ends up long USDC and short PUSD; the reverse direction
+// does the opposite. THORChain moves value between the chains without a custodian: BCH sent to its
+// vault with a memo arrives as USDC on Base, and USDC deposited through its router arrives as BCH.
+// The PUSD leg (BCH <-> PUSD) is a Cauldron swap on Bitcoin Cash.
+//
+// Every call checks THORChain's own halt flags first and refuses to send anything while the route
+// is halted, and every quote is rejected if its fees exceed the caller's cap.
+import { TransactionBuilder } from 'cashscript';
+import { erc20Abi, type Address } from 'viem';
+import { addressToBytecode } from '@chirograph/sdk';
+import type { BchSide } from './bch.js';
+import type { EvmSide } from './evm.js';
+
+export const THORNODE = process.env.THORNODE_URL ?? 'https://gateway.liquify.com/chain/thorchain_api';
+export const THOR_ASSETS = {
+  bch: 'BCH.BCH',
+  baseUsdc: 'BASE.USDC-0X833589FCD6EDB6E08F4C7C32D4F71B54BDA02913',
+} as const;
+/** THORChain counts every asset in 1e8 units. */
+export const THOR_DECIMALS = 8;
+
+export interface ThorQuote {
+  inbound_address: string;
+  router?: string;
+  memo: string;
+  expiry: number;
+  expected_amount_out: string;
+  recommended_min_amount_in?: string;
+  dust_threshold?: string;
+  total_swap_seconds?: number;
+  fees: { asset: string; outbound: string; liquidity: string; total: string; total_bps: number; slippage_bps: number };
+}
+
+export interface RouteStatus { chain: string; halted: boolean; tradingPaused: boolean }
+
+async function thor<T>(path: string): Promise<T> {
+  const res = await fetch(`${THORNODE}/thorchain/${path}`, { headers: { 'x-client-id': 'chirograph' } });
+  const body = await res.json() as T & { message?: string; error?: string };
+  // A refused quote comes back as an object with a message and no inbound address.
+  const refusedQuote = path.startsWith('quote') && !(body && typeof body === 'object' && 'inbound_address' in body);
+  if (!res.ok || refusedQuote) throw new Error(`THORChain ${path.split('?')[0]}: ${body?.message ?? body?.error ?? res.status}`);
+  return body;
+}
+
+/** Halt flags for the chains a route touches, straight from THORChain's inbound addresses. */
+export async function routeStatus(chains: string[]): Promise<RouteStatus[]> {
+  const inbound = await thor<{ chain: string; halted?: boolean; chain_trading_paused?: boolean }[]>('inbound_addresses');
+  return chains.map((chain) => {
+    const c = inbound.find((i) => i.chain === chain);
+    return { chain, halted: !c || !!c.halted, tradingPaused: !c || !!c.chain_trading_paused };
+  });
+}
+
+/** Price a swap. `toleranceBps` bounds the total shortfall (fees plus slippage) baked into the memo. */
+export async function quote(from: string, to: string, amount1e8: bigint, destination: string, toleranceBps?: number): Promise<ThorQuote> {
+  const q = new URLSearchParams({ from_asset: from, to_asset: to, amount: amount1e8.toString(), destination });
+  if (toleranceBps !== undefined) q.set('tolerance_bps', String(toleranceBps));
+  return thor<ThorQuote>(`quote/swap?${q}`);
+}
+
+export type Direction = 'bch-to-base' | 'base-to-bch';
+export interface Plan {
+  direction: Direction;
+  amountIn1e8: bigint;
+  quote: ThorQuote;
+  feeBps: number;
+}
+
+/**
+ * Check the route and price a rebalance. Throws, without sending anything, if THORChain has either
+ * chain halted or if fees exceed `maxFeeBps`.
+ */
+export async function plan(direction: Direction, amountIn1e8: bigint, bch: BchSide, base: EvmSide, maxFeeBps: number): Promise<Plan> {
+  const status = await routeStatus(['BCH', 'BASE']);
+  const blocked = status.filter((s) => s.halted || s.tradingPaused);
+  if (blocked.length) throw new Error(`THORChain route closed: ${blocked.map((s) => `${s.chain} ${s.halted ? 'halted' : 'trading paused'}`).join(', ')}`);
+  const [from, to, destination] = direction === 'bch-to-base'
+    ? [THOR_ASSETS.bch, THOR_ASSETS.baseUsdc, base.account.address]
+    : [THOR_ASSETS.baseUsdc, THOR_ASSETS.bch, bch.address.replace(/^bitcoincash:/, '')];
+  const q = await quote(from, to, amountIn1e8, destination, maxFeeBps);
+  if (q.recommended_min_amount_in && amountIn1e8 < BigInt(q.recommended_min_amount_in)) {
+    throw new Error(`amount below THORChain's recommended minimum of ${q.recommended_min_amount_in} (1e8 units)`);
+  }
+  if (q.fees.total_bps > maxFeeBps) throw new Error(`fees ${q.fees.total_bps} bps exceed the cap of ${maxFeeBps} bps`);
+  return { direction, amountIn1e8, quote: q, feeBps: q.fees.total_bps };
+}
+
+/** Send the inbound transaction for a plan. Returns the inbound transaction id to track. */
+export async function execute(p: Plan, bch: BchSide, base: EvmSide): Promise<string> {
+  if (p.direction === 'bch-to-base') {
+    // BCH -> vault, with the swap memo in an OP_RETURN output.
+    const sats = p.amountIn1e8; // BCH has 8 decimals, so 1e8 units are satoshis
+    if (p.quote.dust_threshold && sats <= BigInt(p.quote.dust_threshold)) throw new Error('amount at or below the dust threshold');
+    const utxos = (await bch.provider.getUtxos(bch.address)).filter((u) => !u.token).sort((a, b) => Number(b.satoshis - a.satoshis));
+    const tx = new TransactionBuilder({ provider: bch.provider });
+    let total = 0n;
+    for (const u of utxos) {
+      tx.addInput(u, bch.signer.unlockP2PKH());
+      total += u.satoshis;
+      if (total >= sats + 2_000n) break;
+    }
+    if (total < sats + 2_000n) throw new Error('not enough BCH outside token UTXOs');
+    tx.addOutput({ to: addressToBytecode(`bitcoincash:${p.quote.inbound_address.replace(/^bitcoincash:/, '')}`), amount: sats })
+      .addOpReturnOutput([p.quote.memo])
+      .addBchChangeOutputIfNeeded({ to: addressToBytecode(bch.address), feeRate: 1 });
+    return (await tx.send()).txid;
+  }
+  // USDC on Base -> THORChain router, which forwards it to the vault with the memo.
+  if (!p.quote.router) throw new Error('quote has no router for an EVM deposit');
+  const usdc6 = p.amountIn1e8 / 100n; // 1e8 -> USDC's 6 decimals
+  const router = p.quote.router as Address;
+  const usdc = base.chain.usdc as Address;
+  const approve = await base.wallet.writeContract({
+    address: usdc, abi: erc20Abi, functionName: 'approve', args: [router, usdc6], chain: base.wallet.chain, account: base.account,
+  });
+  await base.pub.waitForTransactionReceipt({ hash: approve });
+  const hash = await base.wallet.writeContract({
+    address: router, abi: routerAbi, functionName: 'depositWithExpiry',
+    args: [p.quote.inbound_address as Address, usdc, usdc6, p.quote.memo, BigInt(p.quote.expiry)],
+    chain: base.wallet.chain, account: base.account,
+  });
+  const receipt = await base.pub.waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success') throw new Error(`router deposit reverted: ${hash}`);
+  return hash;
+}
+
+/** THORChain's view of an inbound transaction: observed, swapped, and whether the outbound has gone out. */
+export async function track(txid: string): Promise<{ done: boolean; stages: Record<string, unknown>; outTxs: unknown }> {
+  const id = txid.replace(/^0x/, '').toUpperCase();
+  const s = await thor<{ stages?: Record<string, { completed?: boolean }>; out_txs?: unknown }>(`tx/status/${id}`);
+  const stages = s.stages ?? {};
+  const done = !!(stages.outbound_signed as { completed?: boolean } | undefined)?.completed
+    || ((stages.swap_status as { pending?: boolean } | undefined)?.pending === false && !!s.out_txs);
+  return { done, stages, outTxs: s.out_txs };
+}
+
+const routerAbi = [{
+  type: 'function', name: 'depositWithExpiry', stateMutability: 'payable',
+  inputs: [
+    { name: 'vault', type: 'address' }, { name: 'asset', type: 'address' }, { name: 'amount', type: 'uint256' },
+    { name: 'memo', type: 'string' }, { name: 'expiration', type: 'uint256' },
+  ],
+  outputs: [],
+}] as const satisfies readonly unknown[];
+

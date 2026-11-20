@@ -23,6 +23,7 @@ Every public statement about Chirograph, tagged by how you can check it.
 | The escrow behaves correctly with the real USDC contracts | REPRODUCIBLE | fork tests on Base and Arbitrum | `BASE_RPC_URL=… ARBITRUM_RPC_URL=… forge test` (64 tests) |
 | The browser verifies the solver's lock on-chain before it reveals the secret | REPRODUCIBLE | `claimSwapIn` / `checkSolverEvmLock` in [`swaps.ts`](apps/web/src/lib/swaps.ts) | read the code; the e2e driver does the same checks |
 | Today's route takes ~30 s and ~11.6% for $2 USDC → PUSD, and ~10 min and ~11% back | MODELED | THORChain quote API `total_swap_seconds` and `fees.total_bps`, plus Cauldron's 0.3% | query `thornode.ninerealms.com/thorchain/quote/swap` for the same amounts |
+| On 20 Nov 2026 THORChain had Base trading halted, so today's route was closed | VERIFIED-LIVE (snapshot) | [`proof/thorchain-status-2026-11-20.json`](proof/thorchain-status-2026-11-20.json): `inbound_addresses` and `mimir` (`HALTBASETRADING=1`) | `curl https://gateway.liquify.com/chain/thorchain_api/thorchain/inbound_addresses` |
 | "1¢ instead of about 23¢" for $2 | MODELED | 0.3% of $2 rounds up to our 1¢ minimum; THORChain's 11.28% of $2 is 22.6¢, plus Cauldron | arithmetic on the rows above |
 
 ## NOT-CLAIMED
@@ -33,7 +34,8 @@ Every public statement about Chirograph, tagged by how you can check it.
   cap, and fills only after a DSProof window. Users never depend on 0-conf for their own safety.
 - **Many independent solvers.** The API is open and a second solver needs no permission, but one runs
   today.
-- **Automatic cross-chain rebalancing.** It is manual.
+- **A completed THORChain rebalance.** The code in [`rebalance.ts`](apps/solver/src/rebalance.ts) prices and
+  sends rebalances. It refuses to send while THORChain has Base halted, and Base was halted on 20 Nov 2026.
 - **That the six proof swaps were clicked in the browser.** They were driven by a script that makes the
   same SDK calls and checks as the app. The app itself was exercised end to end through WizardConnect
   on chipnet with a Base fork. Swaps made on the live site show up in the explorer.
