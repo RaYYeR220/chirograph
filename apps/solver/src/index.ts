@@ -12,6 +12,7 @@ const bch = new BchSide(cfg);
 await bch.provider.connect();
 const evm = new Map<EvmChainKey, EvmSide>(cfg.chains.map((c) => [c.key, new EvmSide(c, cfg)]));
 const engine = new Engine(cfg, store, bch, evm);
+for (const side of evm.values()) void side.prepare().catch(() => undefined);
 const app = await buildServer(engine);
 
 // The watcher: advance every open swap, including refunds, forever. Each pass is idempotent.

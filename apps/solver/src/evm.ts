@@ -110,6 +110,12 @@ export class EvmSide {
     return Number(block.timestamp);
   }
 
+  /** Approve the escrow once at startup so the first fill does not wait for an approval. */
+  async prepare() {
+    const bal = await this.usdcBalance().catch(() => 0n);
+    if (bal > 0n) await this.ensureAllowance(bal);
+  }
+
   private async ensureAllowance(amount: bigint) {
     const allowance = await this.pub.readContract({
       address: this.chain.usdc, abi: erc20Abi, functionName: 'allowance', args: [this.address, this.chain.htlc],
