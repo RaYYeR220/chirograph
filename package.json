@@ -5,11 +5,15 @@
   "description": "Trustless USDC <-> PUSD atomic swaps between Base/Arbitrum and Bitcoin Cash.",
   "license": "MIT",
   "packageManager": "pnpm@9.15.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "test:evm": "cd contracts/evm && forge test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "verify:onchain": "pnpm --filter @chirograph/solver exec tsx scripts/verify-onchain.ts",
+    "render:proof": "pnpm --filter @chirograph/solver exec tsx scripts/render-proof.ts"
   }
 }

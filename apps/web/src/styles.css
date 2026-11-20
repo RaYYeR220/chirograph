@@ -140,6 +140,9 @@ footer a:hover { color: var(--ink); }
 .wallet { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--line); font-size: 13.5px; }
 .wallet .who { display: flex; flex-direction: column; min-width: 0; }
 .wallet .who b { font-weight: 600; }
+.paste { width: 100%; border: 1px dashed var(--line); border-radius: var(--r-sm); background: transparent; padding: 10px 12px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12.5px; outline: none; }
+.paste:focus { border-style: solid; border-color: var(--ink); }
+.paste[aria-invalid="true"] { border-color: #b3261e; }
 .wallet .who code { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notice { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; }
 .notice.err { background: #fde3dc; color: var(--bad); }

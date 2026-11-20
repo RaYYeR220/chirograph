@@ -90,7 +90,7 @@ export function Landing() {
               <div className="vs">via Cauldron + THORChain: <b>~{Math.round(BASELINE.outSeconds / 60)} min</b> (waits for a BCH block), ~{BASELINE.outFeePct}% in fees</div>
             </div>
           </div>
-          <p className="foot-note">Chirograph: {MEASURED.source}. Baseline: {BASELINE.source}. Fast settlement uses 0-conf with double-spend proofs and is capped per swap; see the <Link href="/protocol" style={{ textDecoration: 'underline' }}>protocol</Link>.</p>
+          <p className="foot-note">Chirograph: {MEASURED.source} (<a href={`${CONFIG.repoUrl}/blob/main/PROOF.md`} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>every transaction</a>). Baseline: {BASELINE.source}. Fast settlement uses 0-conf with double-spend proofs and is capped per swap; see the <Link href="/protocol" style={{ textDecoration: 'underline' }}>protocol</Link>.</p>
         </div>
       </section>
 

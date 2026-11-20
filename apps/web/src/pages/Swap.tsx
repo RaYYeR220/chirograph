@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useAccount, useSignTypedData, useSwitchChain, useWriteContract } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { Address, Hex } from 'viem';
+import { isAddress, type Address, type Hex } from 'viem';
+import { addressToBytecode } from '@chirograph/sdk';
+import { CONFIG } from '../lib/config';
 import type { Direction, EvmChainKey, Quote } from '@chirograph/sdk';
 import { Page } from '../components/Shell';
 import { BchWalletRow, EvmWalletRow, WizardDialog } from '../components/Wallets';
@@ -15,6 +17,13 @@ const devAccount = devKey ? privateKeyToAccount(devKey) : undefined;
 
 const chainIdOf = (key: string) => (key.startsWith('arbitrum') ? 42161 : 8453);
 const chainName = (key: string) => (key.startsWith('arbitrum') ? 'Arbitrum' : 'Base');
+const bchPrefix = CONFIG.bchNetwork === 'mainnet' ? 'bitcoincash:' : 'bchtest:';
+/** A pasted Bitcoin Cash address we can pay a covenant output to, or null. */
+function validBch(a: string): string | null {
+  const v = a.trim();
+  if (!v.toLowerCase().startsWith(bchPrefix)) return null;
+  try { addressToBytecode(v); return v; } catch { return null; }
+}
 
 export function Swap({ id }: { id?: string }) {
   const { info, error: solverError } = useSolverInfo(10_000);
@@ -23,13 +32,20 @@ export function Swap({ id }: { id?: string }) {
   const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
-  const evmAddress = (devAccount?.address ?? address) as Address | undefined;
+  const connectedEvm = (devAccount?.address ?? address) as Address | undefined;
+  // The receiving side can be a pasted address instead of a second connected wallet:
+  // USDC -> PUSD only needs a Bitcoin Cash address to pay, PUSD -> USDC only an EVM address.
+  const [pasteBch, setPasteBch] = useState('');
+  const [pasteEvm, setPasteEvm] = useState('');
 
   const [direction, setDirection] = useState<Direction>('in');
   const [chain, setChain] = useState<EvmChainKey | null>(null);
   const [amount, setAmount] = useState('1.00');
   const [showQr, setShowQr] = useState(false);
   const [pending, setPending] = useState<Quote | null>(null);
+  const pastedBch = direction === 'in' && !bch.wallet ? validBch(pasteBch) : null;
+  const pastedEvm = direction === 'out' && !connectedEvm && isAddress(pasteEvm.trim()) ? (pasteEvm.trim() as Address) : undefined;
+  const evmAddress = connectedEvm ?? pastedEvm;
   const decide = useRef<((ok: boolean) => void) | null>(null);
 
   const chains = info?.chains ?? [];
@@ -39,7 +55,7 @@ export function Swap({ id }: { id?: string }) {
   const cap = info?.capacity[activeChain]?.[direction] ?? 0;
 
   const deps = useMemo(() => ({
-    info, bch, evmAddress,
+    info, bch, evmAddress, bchTarget: pastedBch ?? undefined,
     signTypedData: async (typed: Parameters<typeof signTypedDataAsync>[0]) => {
       if (devAccount) return devAccount.signTypedData(typed as never);
       await switchChainAsync({ chainId: Number((typed as { domain: { chainId: number } }).domain.chainId) as 8453 }).catch(() => undefined);
@@ -50,21 +66,22 @@ export function Swap({ id }: { id?: string }) {
       await switchChainAsync({ chainId: req.chainId as 8453 }).catch(() => undefined);
       return writeContractAsync(req as never);
     },
-  }), [info, bch, evmAddress, signTypedDataAsync, switchChainAsync, writeContractAsync]);
+  }), [info, bch, evmAddress, pastedBch, signTypedDataAsync, switchChainAsync, writeContractAsync]);
   const runner = useSwapRunner(deps as never, id ?? null);
 
   const answer = useCallback((ok: boolean) => { decide.current?.(ok); decide.current = null; setPending(null); }, []);
 
   const busy = runner.stage === 'signing' || runner.stage === 'waiting_solver' || runner.stage === 'claiming';
-  const needsBch = direction === 'out' || !bch.wallet;
-  const canStart = !!info && !!evmAddress && !!bch.wallet && cents >= 25 && cents <= cap && !busy
+  const haveBch = direction === 'in' ? !!(bch.wallet || pastedBch) : !!bch.wallet;
+  const haveEvm = direction === 'in' ? !!connectedEvm : !!evmAddress;
+  const canStart = !!info && haveBch && haveEvm && cents >= 25 && cents <= cap && !busy
     && (direction === 'in' || (bch.wallet?.tokens ?? 0n) >= BigInt(cents));
   const blocker = !info ? (solverError ? 'Solver unreachable right now.' : 'Connecting to the solver…')
-    : !bch.wallet ? 'Connect a Bitcoin Cash wallet (it receives PUSD, or pays it).'
-      : !evmAddress ? 'Connect an EVM wallet (it pays USDC, or receives it).'
+    : !haveBch ? (direction === 'in' ? 'Connect a Bitcoin Cash wallet, or paste the address that should receive PUSD.' : 'Connect the Bitcoin Cash wallet that holds your PUSD.')
+      : !haveEvm ? (direction === 'in' ? 'Connect the EVM wallet that holds your USDC.' : 'Connect an EVM wallet, or paste the address that should receive USDC.')
         : cents < 25 ? 'The smallest swap is $0.25.'
           : cents > cap ? `The solver can fill up to $${(cap / 100).toFixed(2)} in this direction right now.`
-            : direction === 'out' && (bch.wallet.tokens < BigInt(cents)) ? 'Not enough PUSD in this wallet.' : null;
+            : direction === 'out' && ((bch.wallet?.tokens ?? 0n) < BigInt(cents)) ? 'Not enough PUSD in this wallet.' : null;
 
   const from = direction === 'in' ? 'USDC' : 'PUSD';
   const to = direction === 'in' ? 'PUSD' : 'USDC';
@@ -123,7 +140,15 @@ export function Swap({ id }: { id?: string }) {
 
           <div className="wallets">
             <BchWalletRow bch={bch} onConnect={() => setShowQr(true)} />
+            {direction === 'in' && !bch.wallet ? (
+              <input className="paste" spellCheck={false} placeholder={`or paste a ${bchPrefix}… address to receive PUSD`} aria-label="Bitcoin Cash address to receive PUSD"
+                value={pasteBch} disabled={busy} onChange={(e) => setPasteBch(e.target.value)} aria-invalid={!!pasteBch && !pastedBch} />
+            ) : null}
             <EvmWalletRow chainId={chainIdOf(activeChain)} devAddress={devAccount?.address} />
+            {direction === 'out' && !connectedEvm ? (
+              <input className="paste" spellCheck={false} placeholder="or paste a 0x… address to receive USDC" aria-label="EVM address to receive USDC"
+                value={pasteEvm} disabled={busy} onChange={(e) => setPasteEvm(e.target.value)} aria-invalid={!!pasteEvm && !pastedEvm} />
+            ) : null}
           </div>
 
           {pending ? (
@@ -146,7 +171,6 @@ export function Swap({ id }: { id?: string }) {
             </button>
           )}
           {blocker && !busy ? <div className="notice info">{blocker}</div> : null}
-          {needsBch && direction === 'in' && !bch.wallet ? null : null}
         </div>
 
         <SwapProgress swap={runner.swap} stage={runner.stage} error={runner.error} note={runner.note} started={runner.started} fundsAt={runner.fundsAt} plan={direction} />

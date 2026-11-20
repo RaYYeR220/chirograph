@@ -1,0 +1,230 @@
+{
+  "generatedFrom": "live solver API (/v1/swaps) + client-side timings measured by the swapping wallet",
+  "network": {
+    "bch": "mainnet",
+    "evm": [
+      "base",
+      "arbitrum"
+    ]
+  },
+  "pusdCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544",
+  "escrow": {
+    "address": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+    "base": {
+      "chainId": 8453,
+      "deployTx": "0x15fab75aaf8c4d0a5ee67031f4f6d1192116b4c4f98efbbadc899f2a40fe314d",
+      "block": 59848286,
+      "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "sourcify": "https://repo.sourcify.dev/contracts/full_match/8453/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/"
+    },
+    "arbitrum": {
+      "chainId": 42161,
+      "deployTx": "0x6b667abe6c8473788ebf588be681ab8c77bc69298e7e3b95485ed3cf260ad285",
+      "block": 525863802,
+      "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "sourcify": "https://repo.sourcify.dev/contracts/full_match/42161/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/"
+    }
+  },
+  "solver": {
+    "bch": "bitcoincash:qqrqpmrjuhrd0yavzlw9py3q87t2h6la0u80lxvter",
+    "evm": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17",
+    "api": "https://35-240-17-239.sslip.io"
+  },
+  "inventory": [
+    {
+      "what": "solver buys 1.60 PUSD on Cauldron",
+      "chain": "bch",
+      "tx": "f7b5a5fe4a15795cb9cf5fcf1d6f1141ef46e63be03548c79cd5ebad80729d22"
+    },
+    {
+      "what": "solver swaps 0.0009 ETH for 1.56 USDC (Uniswap)",
+      "chain": "base",
+      "tx": "0x82a00169c0cd1dd85187a91fcca56221bc72e858ca7d215f2c75df2b699a7cc1"
+    },
+    {
+      "what": "solver swaps 0.0002 ETH for 0.35 USDC (Uniswap)",
+      "chain": "arbitrum",
+      "tx": "0x5c1955e426db368b7a5abcabeea92b7cdf6443f742e629af06f0cbf7750a5ba4"
+    },
+    {
+      "what": "test wallet receives 0.60 USDC",
+      "chain": "base",
+      "tx": "0x16ea789d202f5127da3b83b03675fadc237cbac616d4474bdc6eb5b029c73869"
+    },
+    {
+      "what": "test wallet receives 25,000 sats for lock fees",
+      "chain": "bch",
+      "tx": "47d021f79b4a3792de19bd0ce55197187923ebf32566f53fca634e527bc276c2"
+    }
+  ],
+  "swaps": [
+    {
+      "id": "4b68394f521c0bf714a5f7f8c0d1890cca97d19963e59963c85b1c2406409d87",
+      "direction": "USDC->PUSD",
+      "chain": "base",
+      "tier": "instant",
+      "amountInCents": 50,
+      "amountOutCents": 49,
+      "feeCents": 1,
+      "openedAt": 1795160349,
+      "secretHash": "4b68394f521c0bf714a5f7f8c0d1890cca97d19963e59963c85b1c2406409d87",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 2265,
+      "msToSettled": 6242,
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0xd5c4c42d3af7b44205e4c6b5c89d738fb41a957d2a885d5392d860f0b6402cca",
+        "lockTx": "0xf96ca92f0fe1b26100108e1ec549b291c2e2c147d4b2d39496dd1b57bc93dfe3",
+        "claimTx": "0xc65a777502575013053383908fad99cce6fd67d571f7cb0423355ebc7d8e642b",
+        "sender": "0xb08f182ffF3C238C4645BE987684E120d962725e",
+        "recipient": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rvelt0e9mgxaclsgqazeq9h8eaf7w9fzxerwk03k6e79wmjaufuwgl6pfydwm",
+        "lockTx": "65a581c87a344245f2effaedc3875cf90d60afca8e6a90418ce270b04095008a",
+        "claimTx": "184e8ac4262c080344878f8c16de8f8b4dff0d389b7386b7f2296e9768190268",
+        "tokenAmount": 49
+      }
+    },
+    {
+      "id": "5ce494ae8247114df749424a5bdb72a3d0269d005dd673d6cc6901242707e3ab",
+      "direction": "PUSD->USDC",
+      "chain": "base",
+      "tier": "instant",
+      "amountInCents": 49,
+      "amountOutCents": 48,
+      "feeCents": 1,
+      "openedAt": 1795160374,
+      "secretHash": "5ce494ae8247114df749424a5bdb72a3d0269d005dd673d6cc6901242707e3ab",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 9262,
+      "msToSettled": 12208,
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0x93f6c8c5330a8dfbaffd8f0b09469123e1df1c4cb1589a7301e2b8788ec24689",
+        "lockTx": "0x809cb01c7487bf568f1903e665fc5fc4a0d535f9cc6bb7514bb3c08f2cb9b11e",
+        "claimTx": "0x48b35ff86d13cf308cb3ee2800fccb920dc629d1d2ba11ed238fb78bb57cbd21",
+        "sender": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17",
+        "recipient": "0xb08f182ffF3C238C4645BE987684E120d962725e"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rvvkfmx5x2h4g59x53wc5an6lqav90rw4e9kgwx3csxhyeuj2xqgqhtqpz7ln",
+        "lockTx": "d56788c0dd9bda641e52be2bd477dfa34113ab4565c56f91515b216d2e72e043",
+        "claimTx": "e5a53442006e741a11d4a54e9cb41b13bd499376c7af1738a018f1f9e214f8ae",
+        "tokenAmount": 49
+      }
+    },
+    {
+      "id": "0399f0839c3b05c405d83a20dcc92f73b18b9adf93b2825fe104b51df303cc28",
+      "direction": "USDC->PUSD",
+      "chain": "base",
+      "tier": "instant",
+      "amountInCents": 45,
+      "amountOutCents": 44,
+      "feeCents": 1,
+      "openedAt": 1795160474,
+      "secretHash": "0399f0839c3b05c405d83a20dcc92f73b18b9adf93b2825fe104b51df303cc28",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 4392,
+      "msToSettled": 6729,
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0x1ed1a05ade5742d9494d4f71a4648cf72d9a8f4441e1992d3d17cf020c8d1a12",
+        "lockTx": "0x662497ffedff9e3d5ca26381e52cbf3166ed31190a41c02b7bf2ffe8a03cd3c3",
+        "claimTx": "0x113a4c38f52c21f838c13c38305eb6c72cec27abb1bc83b2ceb9e729c8d7125a",
+        "sender": "0xb08f182ffF3C238C4645BE987684E120d962725e",
+        "recipient": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:r0vnh7whcjnc4l5arnkgrtdux7u5gf4m70zs5vcexjyffnhen8at7s2mjlmz3",
+        "lockTx": "3ff376054de430566cb617e01fd0d7caaf01c94c1d2e7088f25dd22c9b8f7700",
+        "claimTx": "20030fd77455e5bbe311a382e435b9fc1db98d9dd7b8515e8aa822a35dff44fd",
+        "tokenAmount": 44
+      }
+    },
+    {
+      "id": "f6e7879fc0cabd03af9caad57fcb379900855da1795f95c170be1515eaf18cdb",
+      "direction": "PUSD->USDC",
+      "chain": "arbitrum",
+      "tier": "instant",
+      "amountInCents": 30,
+      "amountOutCents": 29,
+      "feeCents": 1,
+      "openedAt": 1795160483,
+      "secretHash": "f6e7879fc0cabd03af9caad57fcb379900855da1795f95c170be1515eaf18cdb",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 10387,
+      "msToSettled": 12935,
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0x9f600603a80e38d1438f4108a2144e1baa18eb17d1035b4d8588cf82d01f81e4",
+        "lockTx": "0xf769f1e6cd052b062d48b47c8c11c02d0e6f65e3a87830f85efd4cc18790c43e",
+        "claimTx": "0xac5cf924ecc21d707a9d0b1fa26ad060102c401751281d3c6372623effb56feb",
+        "sender": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17",
+        "recipient": "0xb08f182ffF3C238C4645BE987684E120d962725e"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rvk3uh58lddjp4nr7p2cj8kxrzcr2qqyw2dpws6srtp2lr7x7p27ky2ffrvm5",
+        "lockTx": "94bdfc81c8f88d43c251b948be77487828a4a9fe869c94063cc5e50c9a0147fc",
+        "claimTx": "a896b9f13853c9ef31b7b36764af1be058b9f04167fb766c328d2a143e0258bc",
+        "tokenAmount": 30
+      }
+    },
+    {
+      "id": "f0f266924d963fd13312613621a6a9e7816eb28f886c5cf60bf69b5bac47c4a0",
+      "direction": "USDC->PUSD",
+      "chain": "arbitrum",
+      "tier": "instant",
+      "amountInCents": 28,
+      "amountOutCents": 27,
+      "feeCents": 1,
+      "openedAt": 1795160649,
+      "secretHash": "f0f266924d963fd13312613621a6a9e7816eb28f886c5cf60bf69b5bac47c4a0",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 3425,
+      "msToSettled": 6849,
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0x1a766e2dce719bb8ed1a25c863b34b9bc9db40a8b963fb96d6773d53da385f1f",
+        "lockTx": "0x3631b66bcd0e98ea555d73f71086063bbfc66f40807dfffdfe8af1bbdc120e2f",
+        "claimTx": "0x689e0dd7d3cb3ce574d434fe27f483541d9f746462ff9a363ea837361faa259f",
+        "sender": "0xb08f182ffF3C238C4645BE987684E120d962725e",
+        "recipient": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rwmqpraged6lpvaeeykptflww7sdek2urm04qyc0vjuyd8qrqms3x0asz40ys",
+        "lockTx": "b0787eda7a9dc4da177299fa7f04e60a12df56571830187c140d7bf4f5b9ed6b",
+        "claimTx": "a0b48c9c090033df9cf11fffb9c699a133d9c5109fbc0e6b894d803d42fd29a9",
+        "tokenAmount": 27
+      }
+    },
+    {
+      "id": "1d4e052bc7b4156b59676bf49e5badf4e7f7cfe11847fa80e77b0a4089c76de6",
+      "direction": "PUSD->USDC",
+      "chain": "base",
+      "tier": "instant",
+      "amountInCents": 27,
+      "amountOutCents": 26,
+      "feeCents": 1,
+      "openedAt": 1795160682,
+      "secretHash": "1d4e052bc7b4156b59676bf49e5badf4e7f7cfe11847fa80e77b0a4089c76de6",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 8183,
+      "msToSettled": 13979,
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0xf3aace9a6371c3064b27c945b21c95e276a97c4fbbfa21fc3b0c3552c7bf9d94",
+        "lockTx": "0x928e61dfe584f18b161bea22b9fae03234d466e0110b8ec3a3a8f2d257d81dd3",
+        "claimTx": "0x405aa9a1184c0528dc31170d301aefa83e51ea59075ec2e9866f42bab32fe355",
+        "sender": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17",
+        "recipient": "0xb08f182ffF3C238C4645BE987684E120d962725e"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rwt9v50yyh0t2as68z33uhv9yjnhslgpdz4umn2lzkyel58trd3lz2ezh720t",
+        "lockTx": "b5a7fa30831f83408c15c22d0789fb49e3207356ffff2cf33d4fc20e5f04d3bd",
+        "claimTx": "084b514921a3c51a956ae166bf86086c686bc4b1285220e7ce9f06d60564b6b6",
+        "tokenAmount": 27
+      }
+    }
+  ]
+}
