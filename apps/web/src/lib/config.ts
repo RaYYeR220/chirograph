@@ -11,8 +11,8 @@ export const CONFIG = {
   rpc: {
     8453: env.VITE_BASE_RPC as string | undefined,
     42161: env.VITE_ARBITRUM_RPC as string | undefined,
-    10: (env.VITE_OPTIMISM_RPC as string | undefined) ?? EVM_CHAINS.optimism.rpc,
-    137: (env.VITE_POLYGON_RPC as string | undefined) ?? EVM_CHAINS.polygon.rpc,
+    10: env.VITE_OPTIMISM_RPC as string | undefined,
+    137: env.VITE_POLYGON_RPC as string | undefined,
   } as Record<number, string | undefined>,
   /** BLAZE banner links. */
   deckUrl: (env.VITE_DECK_URL as string | undefined) ?? '/deck/',

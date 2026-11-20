@@ -1,11 +1,24 @@
-import { createConfig, http } from 'wagmi';
+import { createConfig, fallback, http } from 'wagmi';
 import { base, arbitrum, optimism, polygon } from 'wagmi/chains';
 import { injected, coinbaseWallet, walletConnect } from 'wagmi/connectors';
 import { createPublicClient, type PublicClient } from 'viem';
+import { EVM_CHAINS } from '@chirograph/sdk';
 import { CONFIG } from './config';
 import { explorerById } from './chains';
 
 const CHAINS = [base, arbitrum, optimism, polygon] as const;
+
+/**
+ * An explicit RPC override (e.g. a local fork) is used alone. Otherwise the chain's public RPCs, in
+ * order: one flaky endpoint must not stall a swap.
+ */
+function transportFor(chainId: number) {
+  const known = Object.values(EVM_CHAINS).find((c) => c.chainId === chainId && !/fork|sepolia/i.test(c.key));
+  const override = CONFIG.rpc[chainId];
+  const urls = (override ? [override] : [known?.rpc, ...(known?.rpcFallbacks ?? [])])
+    .filter((u): u is string => !!u).filter((u, i, a) => a.indexOf(u) === i);
+  return urls.length > 1 ? fallback(urls.map((u) => http(u, { timeout: 10_000 }))) : http(urls[0]);
+}
 
 const connectors = [
   injected(),
@@ -21,10 +34,10 @@ export const wagmiConfig = createConfig({
   chains: CHAINS,
   connectors,
   transports: {
-    [base.id]: http(CONFIG.rpc[base.id]),
-    [arbitrum.id]: http(CONFIG.rpc[arbitrum.id]),
-    [optimism.id]: http(CONFIG.rpc[optimism.id]),
-    [polygon.id]: http(CONFIG.rpc[polygon.id]),
+    [base.id]: transportFor(base.id),
+    [arbitrum.id]: transportFor(arbitrum.id),
+    [optimism.id]: transportFor(optimism.id),
+    [polygon.id]: transportFor(polygon.id),
   },
 });
 
@@ -34,7 +47,7 @@ export function publicClient(chainId: number): PublicClient {
   let c = clients.get(chainId);
   if (!c) {
     const chain = CHAINS.find((c) => c.id === chainId) ?? base;
-    c = createPublicClient({ chain, transport: http(CONFIG.rpc[chainId]) }) as PublicClient;
+    c = createPublicClient({ chain, transport: transportFor(chainId) }) as PublicClient;
     clients.set(chainId, c);
   }
   return c;

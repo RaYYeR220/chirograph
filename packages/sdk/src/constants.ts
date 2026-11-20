@@ -55,6 +55,8 @@ export interface EvmChainConfig {
   htlc?: Address;
   explorer: string;
   rpc: string;
+  /** Other public endpoints tried when `rpc` fails (public RPCs drop requests now and then). */
+  rpcFallbacks?: string[];
 }
 
 export const EVM_CHAINS: Record<EvmChainKey, EvmChainConfig> = {
@@ -63,22 +65,26 @@ export const EVM_CHAINS: Record<EvmChainKey, EvmChainConfig> = {
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     htlc: '0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7',
     explorer: 'https://basescan.org', rpc: 'https://mainnet.base.org',
+    rpcFallbacks: ['https://base-rpc.publicnode.com', 'https://base.drpc.org'],
   },
   arbitrum: {
     key: 'arbitrum', chainId: 42161, name: 'Arbitrum',
     usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
     htlc: '0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7',
     explorer: 'https://arbiscan.io', rpc: 'https://arb1.arbitrum.io/rpc',
+    rpcFallbacks: ['https://arbitrum-one-rpc.publicnode.com', 'https://arbitrum.drpc.org'],
   },
   optimism: {
     key: 'optimism', chainId: 10, name: 'Optimism',
     usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
     explorer: 'https://optimistic.etherscan.io', rpc: 'https://optimism-rpc.publicnode.com',
+    rpcFallbacks: ['https://mainnet.optimism.io', 'https://optimism.drpc.org'],
   },
   polygon: {
     key: 'polygon', chainId: 137, name: 'Polygon',
     usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
     explorer: 'https://polygonscan.com', rpc: 'https://polygon-bor-rpc.publicnode.com',
+    rpcFallbacks: ['https://polygon.drpc.org'],
   },
   baseFork: {
     key: 'baseFork', chainId: 8453, name: 'Base (local fork)',

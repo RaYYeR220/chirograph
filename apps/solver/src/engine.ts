@@ -655,10 +655,19 @@ export class Engine {
   }
   private async refreshInventory() {
     if (Date.now() - this.inventory.at < 5_000) return;
-    const inv = await this.bch.inventory();
-    this.inventory.tokens = inv.tokens;
-    this.inventory.sats = inv.sats;
-    for (const [key, side] of this.evm) this.inventory.usdc.set(key, await side.usdcBalance());
+    // A failed read keeps the last known balance: an RPC hiccup must not take the API down.
+    try {
+      const inv = await this.bch.inventory();
+      this.inventory.tokens = inv.tokens;
+      this.inventory.sats = inv.sats;
+    } catch (err) {
+      console.error('inventory: bitcoin cash read failed', (err as Error).message);
+    }
+    await Promise.all([...this.evm].map(async ([key, side]) => {
+      try { this.inventory.usdc.set(key, await side.usdcBalance()); } catch (err) {
+        console.error(`inventory: ${key} USDC read failed`, (err as Error).message);
+      }
+    }));
     this.inventory.at = Date.now();
   }
 
