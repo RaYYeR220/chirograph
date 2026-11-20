@@ -161,7 +161,8 @@ Solver: copy `apps/solver/.env.example` to `.env`, fill it in, then run
 | `INSTANT_MAX_CENTS`, `INSTANT_EXPOSURE_MAX_CENTS`, `DSPROOF_WAIT_MS` | 0-conf policy: per-swap cap, total cap, proof window |
 | `SWAP_MAX_CENTS`, `MIN_SWAP_CENTS`, `SATS_RESERVE` | Size limits and the BCH kept back for fees |
 
-Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver.
+Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver, and set `VITE_WC_PROJECT_ID`
+(a Reown project id) to offer WalletConnect.
 
 ## Tests
 
