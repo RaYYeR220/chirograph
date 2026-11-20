@@ -215,6 +215,8 @@ export class Engine {
       return record;
     });
     void this.advance(swap.id);
+    // Act the moment the double-spend-proof window closes instead of waiting for the next poll.
+    setTimeout(() => void this.advance(swap.id), this.cfg.dsproofWaitMs + 100).unref();
     return swap;
   }
 
