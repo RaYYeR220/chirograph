@@ -13,6 +13,11 @@ export interface ChainRuntime {
   chainId: number;
   name: string;
   rpc: string;
+  /**
+   * Extra RPCs tried when `rpc` fails. Off unless the operator lists them: every endpoint here is
+   * trusted for the reads that decide settlement, so adding one is a deliberate choice.
+   */
+  rpcFallbacks: string[];
   usdc: Address;
   htlc: Address;
   explorer: string;
@@ -63,6 +68,7 @@ export function loadConfig(): SolverConfig {
       chainId: base.chainId,
       name: base.name,
       rpc: process.env[`${upper}_RPC_URL`] ?? base.rpc,
+      rpcFallbacks: (process.env[`${upper}_RPC_FALLBACKS`] ?? '').split(',').map((u) => u.trim()).filter(Boolean),
       usdc: (process.env[`${upper}_USDC`] ?? base.usdc) as Address,
       htlc: env(`${upper}_HTLC`) as Address,
       explorer: base.explorer,

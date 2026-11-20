@@ -1,11 +1,11 @@
 {
-  "source": "Median of 8 timed mainnet swaps on Base and Arbitrum, measured by the swapping wallet",
-  "swaps": 11,
-  "inSeconds": 3.1,
+  "source": "Median of 9 timed mainnet swaps on Base and Arbitrum, measured by the swapping wallet",
+  "swaps": 12,
+  "inSeconds": 3.4,
   "inBest": 2.3,
-  "inSettled": 6.5,
+  "inSettled": 6.7,
   "outSeconds": 9,
   "outBest": 8.2,
   "outSettled": 12.6,
-  "volumeCents": 403
+  "volumeCents": 433
 }

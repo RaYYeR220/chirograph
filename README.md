@@ -23,7 +23,7 @@ what lets the other side collect theirs. If anything stalls, both sides refund t
 <!-- summary:start -->
 | Direction | Median time to funds | Best | Fully settled (median) | Signatures | Fee |
 |---|---|---|---|---|---|
-| USDC → PUSD/MUSD | **3.1 s** | 2.3 s | 6.5 s | 1 | 0.3%, min 1¢ |
+| USDC → PUSD/MUSD | **3.4 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
 | PUSD/MUSD → USDC | **9.0 s** | 8.2 s | 12.6 s | 1 | 0.3%, min 1¢ |
 <!-- summary:end -->
 
@@ -57,6 +57,7 @@ secret.
 | 9 | 2026-11-20 08:20 | USDC → PUSD | Base | $0.30 → $0.29 | not timed | not timed | [0xea7e3c19…](https://basescan.org/tx/0xea7e3c19887da055042ac4bb3c660c917c5bdf79d01ad52f6bf7ef660dd7e959) → [c1d325d4…](https://explorer.selene.cash/tx/c1d325d49c48491ad353fc3f3811c5c1e4c690cb2c6c9e0d9a5cf18aef25b024) → [9da86d1f…](https://explorer.selene.cash/tx/9da86d1fab5d2c78e1fb4a56cadd03f8d6efe5efd9eec81a06593c98cb2c5434) → [0x5ea4922b…](https://basescan.org/tx/0x5ea4922b021223bae9b35fc10575cf5ff1528f3d30c7aa7a0761049829c60649) |
 | 10 | 2026-11-20 10:01 | USDC → MUSD | Base | $0.40 → $0.39 | 2.7 s | 5.6 s | [0x0f55e004…](https://basescan.org/tx/0x0f55e00406db3789447be530922e670c475df287bbafd1ff32c188cef6bd0936) → [777ce0a8…](https://explorer.selene.cash/tx/777ce0a8499b8f904f4e53906728cfba55a8681bed4cf95b878584b32fd5c3fc) → [e25af46d…](https://explorer.selene.cash/tx/e25af46d2e42a9b87412b03a2ecae18175343eea3acd86c6c8654ec5e377f17f) → [0xa4888af8…](https://basescan.org/tx/0xa4888af88e7c7ff6cee0ef72cd292b4bdd9756a35c6a568c6ee4860913a4cece) |
 | 11 | 2026-11-20 10:02 | MUSD → USDC | Base | $0.39 → $0.38 | 8.7 s | 11.6 s | [8b79b8ac…](https://explorer.selene.cash/tx/8b79b8ac11bf8c2e8e91d2cbfa64fa34adfa64acc1acd6490818fa74d6dfdcee) → [0x0cc0a45f…](https://basescan.org/tx/0x0cc0a45fd5ec579040f143e64b7119ff6ad8c7263fc6801ccdac874a98f964fe) → [0x0d687a37…](https://basescan.org/tx/0x0d687a370a9f1e2e6fb678d27329f9d4950be81b4a0a90d7b8250b94b75bbbd6) → [687a66a4…](https://explorer.selene.cash/tx/687a66a4e41237267eadaeb75dee9908cf696033a28041f9da889af1ef330b18) |
+| 12 | 2026-11-20 15:52 | USDC → PUSD | Base | $0.30 → $0.29 | 4.3 s | 9.4 s | [0xa13fb0b4…](https://basescan.org/tx/0xa13fb0b4acc6803f0159e867953a9c71f7dad99d8b04669683aab82031714249) → [6aa3b219…](https://explorer.selene.cash/tx/6aa3b21940fe2e662c57ff33302efd0916393eb1fe52c98ce4343d947cb84821) → [c8d48e29…](https://explorer.selene.cash/tx/c8d48e290e5cce58ea0d7949a5c2ebf072ac543074557381a573dfa9c268392c) → [0x4ac15afa…](https://basescan.org/tx/0x4ac15afab8e6668183ce9030b8112cb07a81e485de066184054335a017f5f18f) |
 <!-- swaps:end -->
 
 ![A mainnet USDC to PUSD swap: one signature, then each step on both chains with its transaction](docs/img/swap-usdc-to-pusd.jpg)
@@ -150,6 +151,7 @@ Solver: copy `apps/solver/.env.example` to `.env`, fill it in, then run
 | `BCH_WIF`, `EVM_PRIVATE_KEY` | Solver keys; one EVM key serves every chain |
 | `TOKEN_CATEGORY`, `MUSD_CATEGORY` | PUSD and MUSD on mainnet (set `MUSD_CATEGORY=` empty to offer PUSD only); any fungible CashTokens on chipnet |
 | `CHAINS`, `<CHAIN>_HTLC`, `<CHAIN>_DEPLOY_BLOCK`, `<CHAIN>_RPC_URL` | Which EVM chains to serve and where the escrow lives |
+| `<CHAIN>_RPC_FALLBACKS` | Optional extra RPCs, tried when the main one fails. Off by default: each one is trusted for the reads that decide settlement |
 | `FEE_BPS`, `MIN_FEE_CENTS` | Price: 30 bps, 1¢ minimum |
 | `INSTANT_MAX_CENTS`, `INSTANT_EXPOSURE_MAX_CENTS`, `DSPROOF_WAIT_MS` | 0-conf policy: per-swap cap, total cap, proof window |
 | `SWAP_MAX_CENTS`, `MIN_SWAP_CENTS`, `SATS_RESERVE` | Size limits and the BCH kept back for fees |

@@ -4,7 +4,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { base, arbitrum, baseSepolia, arbitrumSepolia, optimism, polygon } from 'viem/chains';
-import { htlcAbi, erc20Abi, LockState, type EvmChainKey, EVM_CHAINS } from '@chirograph/sdk';
+import { htlcAbi, erc20Abi, LockState, type EvmChainKey } from '@chirograph/sdk';
 import { Mutex } from './mutex.js';
 import type { ChainRuntime, SolverConfig } from './config.js';
 
@@ -27,8 +27,8 @@ export class EvmSide {
   constructor(readonly chain: ChainRuntime, cfg: SolverConfig) {
     const viemChain = VIEM_CHAINS[chain.key];
     this.account = privateKeyToAccount(cfg.evmKey);
-    // The configured RPC first, then the chain's public fallbacks: one flaky endpoint must not stall a swap.
-    const urls = [chain.rpc, ...(EVM_CHAINS[chain.key]?.rpcFallbacks ?? [])].filter((u, i, a) => a.indexOf(u) === i);
+    // The configured RPC first, then any fallbacks the operator chose to trust (none by default).
+    const urls = [chain.rpc, ...chain.rpcFallbacks].filter((u, i, a) => a.indexOf(u) === i);
     const transport = urls.length > 1 ? fallback(urls.map((u) => http(u, { timeout: 10_000 }))) : http(chain.rpc);
     this.pub = createPublicClient({ chain: viemChain, transport }) as PublicClient;
     this.wallet = createWalletClient({ chain: viemChain, transport, account: this.account });
