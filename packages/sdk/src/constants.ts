@@ -52,11 +52,13 @@ export const EVM_CHAINS: Record<EvmChainKey, EvmChainConfig> = {
   base: {
     key: 'base', chainId: 8453, name: 'Base',
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    htlc: '0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7',
     explorer: 'https://basescan.org', rpc: 'https://mainnet.base.org',
   },
   arbitrum: {
     key: 'arbitrum', chainId: 42161, name: 'Arbitrum',
     usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    htlc: '0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7',
     explorer: 'https://arbiscan.io', rpc: 'https://arb1.arbitrum.io/rpc',
   },
   baseFork: {
