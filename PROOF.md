@@ -14,10 +14,14 @@ pnpm install && pnpm verify:onchain
 |---|---|---|---|
 | Base | [`0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7`](https://basescan.org/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7) | [0x15fab75a…](https://basescan.org/tx/0x15fab75aaf8c4d0a5ee67031f4f6d1192116b4c4f98efbbadc899f2a40fe314d) (block 59,848,286) | [Sourcify full match](https://repo.sourcify.dev/contracts/full_match/8453/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/) |
 | Arbitrum | [`0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7`](https://arbiscan.io/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7) | [0x6b667abe…](https://arbiscan.io/tx/0x6b667abe6c8473788ebf588be681ab8c77bc69298e7e3b95485ed3cf260ad285) (block 525,863,802) | [Sourcify full match](https://repo.sourcify.dev/contracts/full_match/42161/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/) |
+| Optimism | [`0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7`](https://optimistic.etherscan.io/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7) | [0xc31b458f…](https://optimistic.etherscan.io/tx/0xc31b458fdbed564b8c048ba7be8e7b348c8013aa86243a7bd05a0373ea287554) (block 159,801,949) | [Sourcify exact match](https://repo.sourcify.dev/contracts/full_match/10/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/) |
+| Polygon | [`0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7`](https://polygonscan.com/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7) | [0x0149f5b0…](https://polygonscan.com/tx/0x0149f5b040b38d5d41672898cdbefe0706c146c031a6af34ec36ffa68d65659a) (block 97,664,846) | [Sourcify exact match](https://repo.sourcify.dev/contracts/full_match/137/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7/) |
 
 Each escrow is bound to native USDC at deploy time: `token()` returns
-[`0x8335…2913`](https://basescan.org/token/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913) on Base and
-[`0xaf88…5831`](https://arbiscan.io/token/0xaf88d065e77c8cC2239327C5EDb3A432268e5831) on Arbitrum.
+[`0x8335…2913`](https://basescan.org/token/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913) on Base,
+[`0xaf88…5831`](https://arbiscan.io/token/0xaf88d065e77c8cC2239327C5EDb3A432268e5831) on Arbitrum,
+[`0x0b2C…Ff85`](https://optimistic.etherscan.io/token/0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85) on Optimism and
+[`0x3c49…3359`](https://polygonscan.com/token/0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359) on Polygon.
 
 The Bitcoin Cash side has no deployment. Every swap creates its own `ChirographLock` address from the
 swap's parameters. The lock and claim transactions in the table below are those covenants in use.
@@ -27,8 +31,8 @@ swap's parameters. The lock and claim transactions in the table below are those 
 <!-- summary:start -->
 | Direction | Median time to funds | Best | Fully settled (median) | Signatures | Fee |
 |---|---|---|---|---|---|
-| USDC → PUSD/MUSD | **3.4 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
-| PUSD/MUSD → USDC | **9.0 s** | 8.2 s | 12.6 s | 1 | 0.3%, min 1¢ |
+| USDC → PUSD/MUSD | **4.3 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
+| PUSD/MUSD → USDC | **9.3 s** | 8.2 s | 12.9 s | 1 | 0.3%, min 1¢ |
 <!-- summary:end -->
 
 ## Every swap
@@ -52,6 +56,9 @@ lock, the solver's USDC lock, the relayed USDC claim to you, and the solver's ke
 | 10 | 2026-11-20 10:01 | USDC → MUSD | Base | $0.40 → $0.39 | 2.7 s | 5.6 s | [0x0f55e004…](https://basescan.org/tx/0x0f55e00406db3789447be530922e670c475df287bbafd1ff32c188cef6bd0936) → [777ce0a8…](https://explorer.selene.cash/tx/777ce0a8499b8f904f4e53906728cfba55a8681bed4cf95b878584b32fd5c3fc) → [e25af46d…](https://explorer.selene.cash/tx/e25af46d2e42a9b87412b03a2ecae18175343eea3acd86c6c8654ec5e377f17f) → [0xa4888af8…](https://basescan.org/tx/0xa4888af88e7c7ff6cee0ef72cd292b4bdd9756a35c6a568c6ee4860913a4cece) |
 | 11 | 2026-11-20 10:02 | MUSD → USDC | Base | $0.39 → $0.38 | 8.7 s | 11.6 s | [8b79b8ac…](https://explorer.selene.cash/tx/8b79b8ac11bf8c2e8e91d2cbfa64fa34adfa64acc1acd6490818fa74d6dfdcee) → [0x0cc0a45f…](https://basescan.org/tx/0x0cc0a45fd5ec579040f143e64b7119ff6ad8c7263fc6801ccdac874a98f964fe) → [0x0d687a37…](https://basescan.org/tx/0x0d687a370a9f1e2e6fb678d27329f9d4950be81b4a0a90d7b8250b94b75bbbd6) → [687a66a4…](https://explorer.selene.cash/tx/687a66a4e41237267eadaeb75dee9908cf696033a28041f9da889af1ef330b18) |
 | 12 | 2026-11-20 15:52 | USDC → PUSD | Base | $0.30 → $0.29 | 4.3 s | 9.4 s | [0xa13fb0b4…](https://basescan.org/tx/0xa13fb0b4acc6803f0159e867953a9c71f7dad99d8b04669683aab82031714249) → [6aa3b219…](https://explorer.selene.cash/tx/6aa3b21940fe2e662c57ff33302efd0916393eb1fe52c98ce4343d947cb84821) → [c8d48e29…](https://explorer.selene.cash/tx/c8d48e290e5cce58ea0d7949a5c2ebf072ac543074557381a573dfa9c268392c) → [0x4ac15afa…](https://basescan.org/tx/0x4ac15afab8e6668183ce9030b8112cb07a81e485de066184054335a017f5f18f) |
+| 13 | 2026-11-20 20:05 | USDC → PUSD | Optimism | $0.30 → $0.29 | 4.4 s | 6.0 s | [0x1d64c60e…](https://optimistic.etherscan.io/tx/0x1d64c60e448bf6918a984554e8ee1e2ad7f6341dc5f23b601d28689675239366) → [1803f26d…](https://explorer.selene.cash/tx/1803f26d258c5e9904efdfa1002dc3e32724ae49bd2cb626d2ec8007af149620) → [c6334cc2…](https://explorer.selene.cash/tx/c6334cc22283acefe80e0106b615491766b69938dc69c5135021e46c56f36457) → [0xde62ab7c…](https://optimistic.etherscan.io/tx/0xde62ab7c902b4ea191199acfe80cde5a86e236d314758f1b26b132c59f342553) |
+| 14 | 2026-11-20 20:08 | USDC → PUSD | Polygon | $0.30 → $0.29 | 5.1 s | 7.8 s | [0x55fe737d…](https://polygonscan.com/tx/0x55fe737de75f176cbe6bba843743308d3cee700746627590e109feda39d40d59) → [d97f3a91…](https://explorer.selene.cash/tx/d97f3a9182e374456184e79196d4de5b1267a0cf363bf4c32871080dce5ff75b) → [881125e4…](https://explorer.selene.cash/tx/881125e47900449d157928f9774b7718f23e315719d3a32ad84a9d9754f2126a) → [0xb1268f75…](https://polygonscan.com/tx/0xb1268f7557459b975225c110b5feea4b49fe7504db806a71a904707969bd7851) |
+| 15 | 2026-11-20 20:12 | PUSD → USDC | Polygon | $0.29 → $0.28 | 10.7 s | 14.6 s | [41f24a31…](https://explorer.selene.cash/tx/41f24a31009987511ad94b25581568bd76bc64ebb63c2bd174760d94d41697ca) → [0xb239255c…](https://polygonscan.com/tx/0xb239255cbb40b4ef40f582c33a3c1f71fa6133ce8900467ecb5b34fc217775ab) → [0x1e6ac429…](https://polygonscan.com/tx/0x1e6ac429f1772cd51f329e0b36749dc0a8d64dcf47ffe103d8780e2241abc690) → [b40c87fa…](https://explorer.selene.cash/tx/b40c87fa8775d21dbf4596c29bb2f7d58469107a676f98b996840e89fb78d51c) |
 <!-- swaps:end -->
 
 "To funds" means from the user's signature until the money is spendable in the user's wallet.
@@ -85,7 +92,7 @@ These moved money into place before the swaps above. None of them is part of a s
 | Test wallet receives 0.60 USDC on Base | [0x16ea789d…](https://basescan.org/tx/0x16ea789d202f5127da3b83b03675fadc237cbac616d4474bdc6eb5b029c73869) |
 | Test wallet receives 25,000 sats for lock fees | [47d021f7…](https://explorer.selene.cash/tx/47d021f79b4a3792de19bd0ce55197187923ebf32566f53fca634e527bc276c2) |
 
-Nine swaps were driven by a script that acts exactly like the browser does. It uses the same SDK
+Twelve swaps were driven by a script that acts exactly like the browser does. It uses the same SDK
 calls, the same on-chain checks before revealing, and the same keyless claim. Swaps 7 to 9 were made in
 the live app while filming the demo video, with a WizardConnect wallet, so they carry no script timing. The same flows were also
 run in the real app through a WizardConnect wallet, on chipnet with a Base fork. Swaps made from the live

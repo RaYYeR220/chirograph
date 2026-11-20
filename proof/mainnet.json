@@ -444,6 +444,99 @@
         "tokenAmount": 29,
         "tokenCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544"
       }
+    },
+    {
+      "id": "318a0adc55c37730e896c906b9ea0ee326cab933f3297ac47403c0722310ab04",
+      "direction": "USDC->PUSD",
+      "token": "PUSD",
+      "chain": "optimism",
+      "tier": "instant",
+      "amountInCents": 30,
+      "amountOutCents": 29,
+      "feeCents": 1,
+      "openedAt": 1795205130,
+      "secretHash": "318a0adc55c37730e896c906b9ea0ee326cab933f3297ac47403c0722310ab04",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 4446,
+      "msToSettled": 6005,
+      "timedBy": "script",
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0x28e12f8d7d90f50d7e5e0bcb7deebfb146dbbceeb04795d0f0776613aa395d74",
+        "lockTx": "0x1d64c60e448bf6918a984554e8ee1e2ad7f6341dc5f23b601d28689675239366",
+        "claimTx": "0xde62ab7c902b4ea191199acfe80cde5a86e236d314758f1b26b132c59f342553",
+        "sender": "0xb08f182ffF3C238C4645BE987684E120d962725e",
+        "recipient": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rv97xt5qtrhzdlhana5q70324hawqj4j9pf59qky7ex0a5zk2wdt7s57hy809",
+        "lockTx": "1803f26d258c5e9904efdfa1002dc3e32724ae49bd2cb626d2ec8007af149620",
+        "claimTx": "c6334cc22283acefe80e0106b615491766b69938dc69c5135021e46c56f36457",
+        "tokenAmount": 29,
+        "tokenCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544"
+      }
+    },
+    {
+      "id": "9f96e7d53d49e61d6be81c78fef4b3ebd7efe7e2739921fcbbf17f4aba84826d",
+      "direction": "USDC->PUSD",
+      "token": "PUSD",
+      "chain": "polygon",
+      "tier": "instant",
+      "amountInCents": 30,
+      "amountOutCents": 29,
+      "feeCents": 1,
+      "openedAt": 1795205335,
+      "secretHash": "9f96e7d53d49e61d6be81c78fef4b3ebd7efe7e2739921fcbbf17f4aba84826d",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 5090,
+      "msToSettled": 7819,
+      "timedBy": "script",
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0x580950456950e8af0c0614716f5ba4eb5f907700a0caf108abc212be059d47a5",
+        "lockTx": "0x55fe737de75f176cbe6bba843743308d3cee700746627590e109feda39d40d59",
+        "claimTx": "0xb1268f7557459b975225c110b5feea4b49fe7504db806a71a904707969bd7851",
+        "sender": "0xb08f182ffF3C238C4645BE987684E120d962725e",
+        "recipient": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rv5e7x2hxv49hacgp40yqg0l3ck4708wtc7srxd3sp3ld8vqre2skt54x0962",
+        "lockTx": "d97f3a9182e374456184e79196d4de5b1267a0cf363bf4c32871080dce5ff75b",
+        "claimTx": "881125e47900449d157928f9774b7718f23e315719d3a32ad84a9d9754f2126a",
+        "tokenAmount": 29,
+        "tokenCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544"
+      }
+    },
+    {
+      "id": "693c72a607abeb48b7d7731b4070e08bb99a57bf6734e33810871aeb08c93e5e",
+      "direction": "PUSD->USDC",
+      "token": "PUSD",
+      "chain": "polygon",
+      "tier": "instant",
+      "amountInCents": 29,
+      "amountOutCents": 28,
+      "feeCents": 1,
+      "openedAt": 1795205531,
+      "secretHash": "693c72a607abeb48b7d7731b4070e08bb99a57bf6734e33810871aeb08c93e5e",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 10695,
+      "msToSettled": 14645,
+      "timedBy": "script",
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0x95b8bffdc29dca1b618a7e7237daae4309fcf79eed6163d27481c061799673f6",
+        "lockTx": "0xb239255cbb40b4ef40f582c33a3c1f71fa6133ce8900467ecb5b34fc217775ab",
+        "claimTx": "0x1e6ac429f1772cd51f329e0b36749dc0a8d64dcf47ffe103d8780e2241abc690",
+        "sender": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17",
+        "recipient": "0xb08f182ffF3C238C4645BE987684E120d962725e"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rvnmjwc0sg0rrzxaarf0q4an869uzuqppexpt45cq4sw4mwwqawz275gk8kzn",
+        "lockTx": "41f24a31009987511ad94b25581568bd76bc64ebb63c2bd174760d94d41697ca",
+        "claimTx": "b40c87fa8775d21dbf4596c29bb2f7d58469107a676f98b996840e89fb78d51c",
+        "tokenAmount": 29,
+        "tokenCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544"
+      }
     }
   ],
   "musdCategory": "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366"

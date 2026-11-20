@@ -8,7 +8,7 @@
  *           data-token="PUSD"></script>        // PUSD (default) or MUSD
  *
  * Renders a button; clicking it opens the Chirograph checkout in a modal. The payer signs one USDC
- * authorization on Base or Arbitrum and the merchant receives PUSD (or MUSD) on Bitcoin Cash. The page is told
+ * authorization on Base, Arbitrum, Optimism or Polygon and the merchant receives PUSD (or MUSD) on Bitcoin Cash. The page is told
  * about the result through a `chirograph:paid` DOM event on the script's button.
  */
 (function () {

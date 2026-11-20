@@ -110,7 +110,7 @@ export function Pay() {
   if (embed) return <div style={{ padding: 12 }}>{content}</div>;
   return (
     <Page>
-      <div className="page-h"><h1>Checkout</h1><p>Pay any Bitcoin Cash merchant with USDC on Base or Arbitrum. One signature; the merchant receives PUSD or MUSD seconds later.</p></div>
+      <div className="page-h"><h1>Checkout</h1><p>Pay any Bitcoin Cash merchant with USDC on Base, Arbitrum, Optimism or Polygon. One signature; the merchant receives PUSD or MUSD seconds later.</p></div>
       {content}
     </Page>
   );

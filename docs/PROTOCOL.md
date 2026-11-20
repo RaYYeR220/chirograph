@@ -1,6 +1,6 @@
 # Chirograph protocol
 
-Chirograph swaps USDC on Base or Arbitrum for PUSD on Bitcoin Cash, and back, with a hash time-locked
+Chirograph swaps USDC on Base, Arbitrum, Optimism or Polygon for PUSD on Bitcoin Cash, and back, with a hash time-locked
 atomic swap. Nothing is bridged or wrapped: USDC never leaves its EVM chain and PUSD never leaves Bitcoin
 Cash. Each side locks its own funds to the same 32-byte secret, and revealing the secret on one chain is
 exactly what lets the other side claim on the other chain.

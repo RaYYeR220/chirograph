@@ -137,7 +137,7 @@ export async function startSeamField(cv: HTMLCanvasElement, panel: HTMLElement, 
     const ny = sw ? (mob ? sw.y - 44 : sw.y) : pBot + (mob ? 22 : 30);
     if (ny < H - 60) {
       ctx.fillStyle = `rgba(${C.ink},.9)`; ctx.fillRect(cx0, ny - sq / 2 - 0.5, sq + 1, sq + 1);
-      label(mob ? 'USDC · Base' : 'USDC · Base / Arbitrum', cx0 + 12, ny, { size: mob ? 12 : 13.5, font: 'sans', weight: 600 });
+      label(mob ? 'USDC · Base' : 'USDC · Base, Arbitrum, OP, Polygon', cx0 + 12, ny, { size: mob ? 12 : 13.5, font: 'sans', weight: 600 });
       ctx.fillStyle = `rgba(${C.ink},.9)`; ctx.beginPath(); ctx.arc(cx1 - cr - 0.5, ny, cr + 0.5, 0, 6.283); ctx.fill();
       label(mob ? 'PUSD · BCH' : 'PUSD · Bitcoin Cash', cx1 - 12, ny, { size: mob ? 12 : 13.5, align: 'right', font: 'sans', weight: 600 });
     }

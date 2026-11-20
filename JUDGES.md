@@ -1,5 +1,7 @@
 # Review in five minutes
 
+Prefer to watch first? The 2:42 demo, with real mainnet swaps: https://youtu.be/6Wd83G2KOjk
+
 ## 1. Open the site (30 s)
 
 https://chirograph-cash.vercel.app
@@ -20,7 +22,7 @@ The solver holds a couple of dollars per side, so keep it small. The swap form s
 
 **PUSD → USDC, with only a Bitcoin Cash wallet**
 
-1. [/swap](https://chirograph-cash.vercel.app/swap) → *PUSD → USDC*, pick Base or Arbitrum.
+1. [/swap](https://chirograph-cash.vercel.app/swap) → *PUSD → USDC*, pick a chain: Base, Arbitrum, Optimism or Polygon.
 2. *Connect* the Bitcoin Cash wallet. Selene, Paytaca and Cashonize connect over WizardConnect: scan
    the QR code.
 3. Paste any 0x address to receive the USDC. You don't need an EVM wallet; the relayer pays the gas.
@@ -62,5 +64,5 @@ it runs a negative control that must fail.
 ## Bonus: the merchant button
 
 [/merchants](https://chirograph-cash.vercel.app/merchants) shows a Bitcoin Cash shop that adds one script
-tag and gets a "Pay with USDC" button. The buyer pays USDC on Base or Arbitrum, and the shop's address
+tag and gets a "Pay with USDC" button. The buyer pays USDC on Base, Arbitrum, Optimism or Polygon, and the shop's address
 receives PUSD.

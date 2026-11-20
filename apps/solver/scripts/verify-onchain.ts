@@ -15,12 +15,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ElectrumNetworkProvider } from 'cashscript';
 import { decodeTransaction, hexToBin, binToHex, sha256 } from '@bitauth/libauth';
-import { createPublicClient, http, decodeEventLog, type Hex, type Address, type PublicClient } from 'viem';
-import { base, arbitrum } from 'viem/chains';
-import { htlcAbi, extractSecret } from '@chirograph/sdk';
+import { createPublicClient, fallback, http, decodeEventLog, type Hex, type Address, type PublicClient } from 'viem';
+import { base, arbitrum, optimism, polygon } from 'viem/chains';
+import { htlcAbi, extractSecret, EVM_CHAINS } from '@chirograph/sdk';
 
 interface ProofSwap {
-  id: string; direction: string; chain: 'base' | 'arbitrum';
+  id: string; direction: string; chain: 'base' | 'arbitrum' | 'optimism' | 'polygon';
   amountInCents: number; amountOutCents: number; secretHash: string;
   evm: { htlc: Address; lockId: Hex; lockTx: Hex; claimTx: Hex; sender: Address; recipient: Address };
   bch: { lockTx: string; claimTx: string; tokenAmount: number; tokenCategory?: string };
@@ -28,10 +28,13 @@ interface ProofSwap {
 const proofPath = fileURLToPath(new URL('../../../proof/mainnet.json', import.meta.url));
 const proof = JSON.parse(readFileSync(proofPath, 'utf8')) as { pusdCategory: string; swaps: ProofSwap[] };
 
-const clients: Record<string, PublicClient> = {
-  base: createPublicClient({ chain: base, transport: http(process.env.BASE_RPC_URL ?? 'https://mainnet.base.org') }) as PublicClient,
-  arbitrum: createPublicClient({ chain: arbitrum, transport: http(process.env.ARBITRUM_RPC_URL ?? 'https://arb1.arbitrum.io/rpc') }) as PublicClient,
-};
+// Public endpoints for each chain (an env override first, if set), tried in order.
+const VIEM = { base, arbitrum, optimism, polygon } as const;
+const clients: Record<string, PublicClient> = Object.fromEntries((Object.keys(VIEM) as (keyof typeof VIEM)[]).map((k) => {
+  const c = EVM_CHAINS[k];
+  const urls = [process.env[`${k.toUpperCase()}_RPC_URL`], c.rpc, ...(c.rpcFallbacks ?? [])].filter((u): u is string => !!u);
+  return [k, createPublicClient({ chain: VIEM[k], transport: fallback(urls.map((u) => http(u, { timeout: 15_000 }))) }) as PublicClient];
+}));
 const electrum = new ElectrumNetworkProvider('mainnet', { manualConnectionManagement: true });
 await electrum.connect();
 const tip = await electrum.getBlockHeight();

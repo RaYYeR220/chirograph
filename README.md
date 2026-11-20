@@ -1,6 +1,6 @@
 # Chirograph
 
-**Move $2 from USDC on Base to PUSD on Bitcoin Cash for 1¢, in about three seconds. The usual route costs about 23¢ and needs a second swap.**
+**Move $2 from USDC on Base to PUSD on Bitcoin Cash for 1¢, in seconds. The usual route costs about 23¢ and needs a second swap.**
 
 ![Chirograph: one secret opens both](docs/img/home.jpg)
 
@@ -8,12 +8,13 @@ A café in Manila takes Bitcoin Cash through Paytaca. A visitor holds USDC on Ba
 would have to sign up at an exchange or run a multi-hop route. With Chirograph they sign once, and the
 café sees PUSD a few seconds later.
 
-Chirograph swaps USDC on Base or Arbitrum for PUSD (ParyonUSD) or MUSD (MoriaUSD) on Bitcoin Cash, and
+Chirograph swaps USDC on Base, Arbitrum, Optimism or Polygon for PUSD (ParyonUSD) or MUSD (MoriaUSD) on Bitcoin Cash, and
 back. Nothing is bridged or wrapped. The USDC stays on its chain and the Bitcoin Cash dollars stay on Bitcoin Cash. Both sides lock to the
 same 32-byte secret, and only your browser knows it. Revealing the secret to collect one side is exactly
 what lets the other side collect theirs. If anything stalls, both sides refund themselves.
 
 **Live on mainnet:** https://chirograph-cash.vercel.app
+- **Demo video (2:42):** https://youtu.be/6Wd83G2KOjk
 - [Swap](https://chirograph-cash.vercel.app/swap) · [live explorer of every swap](https://chirograph-cash.vercel.app/explorer) · ["Pay with USDC" checkout for Bitcoin Cash merchants](https://chirograph-cash.vercel.app/merchants) · [deck](https://chirograph-cash.vercel.app/deck/)
 - Reviewing? Start with [JUDGES.md](JUDGES.md). Every claim and its evidence tier are in [CLAIMS.md](CLAIMS.md). Every transaction is in [PROOF.md](PROOF.md).
 - Protocol, timeouts and threat model: [docs/PROTOCOL.md](docs/PROTOCOL.md)
@@ -23,8 +24,8 @@ what lets the other side collect theirs. If anything stalls, both sides refund t
 <!-- summary:start -->
 | Direction | Median time to funds | Best | Fully settled (median) | Signatures | Fee |
 |---|---|---|---|---|---|
-| USDC → PUSD/MUSD | **3.4 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
-| PUSD/MUSD → USDC | **9.0 s** | 8.2 s | 12.6 s | 1 | 0.3%, min 1¢ |
+| USDC → PUSD/MUSD | **4.3 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
+| PUSD/MUSD → USDC | **9.3 s** | 8.2 s | 12.9 s | 1 | 0.3%, min 1¢ |
 <!-- summary:end -->
 
 Every number above comes from `proof/mainnet.json` through `pnpm render:proof`. Nothing is typed by
@@ -58,6 +59,9 @@ secret.
 | 10 | 2026-11-20 10:01 | USDC → MUSD | Base | $0.40 → $0.39 | 2.7 s | 5.6 s | [0x0f55e004…](https://basescan.org/tx/0x0f55e00406db3789447be530922e670c475df287bbafd1ff32c188cef6bd0936) → [777ce0a8…](https://explorer.selene.cash/tx/777ce0a8499b8f904f4e53906728cfba55a8681bed4cf95b878584b32fd5c3fc) → [e25af46d…](https://explorer.selene.cash/tx/e25af46d2e42a9b87412b03a2ecae18175343eea3acd86c6c8654ec5e377f17f) → [0xa4888af8…](https://basescan.org/tx/0xa4888af88e7c7ff6cee0ef72cd292b4bdd9756a35c6a568c6ee4860913a4cece) |
 | 11 | 2026-11-20 10:02 | MUSD → USDC | Base | $0.39 → $0.38 | 8.7 s | 11.6 s | [8b79b8ac…](https://explorer.selene.cash/tx/8b79b8ac11bf8c2e8e91d2cbfa64fa34adfa64acc1acd6490818fa74d6dfdcee) → [0x0cc0a45f…](https://basescan.org/tx/0x0cc0a45fd5ec579040f143e64b7119ff6ad8c7263fc6801ccdac874a98f964fe) → [0x0d687a37…](https://basescan.org/tx/0x0d687a370a9f1e2e6fb678d27329f9d4950be81b4a0a90d7b8250b94b75bbbd6) → [687a66a4…](https://explorer.selene.cash/tx/687a66a4e41237267eadaeb75dee9908cf696033a28041f9da889af1ef330b18) |
 | 12 | 2026-11-20 15:52 | USDC → PUSD | Base | $0.30 → $0.29 | 4.3 s | 9.4 s | [0xa13fb0b4…](https://basescan.org/tx/0xa13fb0b4acc6803f0159e867953a9c71f7dad99d8b04669683aab82031714249) → [6aa3b219…](https://explorer.selene.cash/tx/6aa3b21940fe2e662c57ff33302efd0916393eb1fe52c98ce4343d947cb84821) → [c8d48e29…](https://explorer.selene.cash/tx/c8d48e290e5cce58ea0d7949a5c2ebf072ac543074557381a573dfa9c268392c) → [0x4ac15afa…](https://basescan.org/tx/0x4ac15afab8e6668183ce9030b8112cb07a81e485de066184054335a017f5f18f) |
+| 13 | 2026-11-20 20:05 | USDC → PUSD | Optimism | $0.30 → $0.29 | 4.4 s | 6.0 s | [0x1d64c60e…](https://optimistic.etherscan.io/tx/0x1d64c60e448bf6918a984554e8ee1e2ad7f6341dc5f23b601d28689675239366) → [1803f26d…](https://explorer.selene.cash/tx/1803f26d258c5e9904efdfa1002dc3e32724ae49bd2cb626d2ec8007af149620) → [c6334cc2…](https://explorer.selene.cash/tx/c6334cc22283acefe80e0106b615491766b69938dc69c5135021e46c56f36457) → [0xde62ab7c…](https://optimistic.etherscan.io/tx/0xde62ab7c902b4ea191199acfe80cde5a86e236d314758f1b26b132c59f342553) |
+| 14 | 2026-11-20 20:08 | USDC → PUSD | Polygon | $0.30 → $0.29 | 5.1 s | 7.8 s | [0x55fe737d…](https://polygonscan.com/tx/0x55fe737de75f176cbe6bba843743308d3cee700746627590e109feda39d40d59) → [d97f3a91…](https://explorer.selene.cash/tx/d97f3a9182e374456184e79196d4de5b1267a0cf363bf4c32871080dce5ff75b) → [881125e4…](https://explorer.selene.cash/tx/881125e47900449d157928f9774b7718f23e315719d3a32ad84a9d9754f2126a) → [0xb1268f75…](https://polygonscan.com/tx/0xb1268f7557459b975225c110b5feea4b49fe7504db806a71a904707969bd7851) |
+| 15 | 2026-11-20 20:12 | PUSD → USDC | Polygon | $0.29 → $0.28 | 10.7 s | 14.6 s | [41f24a31…](https://explorer.selene.cash/tx/41f24a31009987511ad94b25581568bd76bc64ebb63c2bd174760d94d41697ca) → [0xb239255c…](https://polygonscan.com/tx/0xb239255cbb40b4ef40f582c33a3c1f71fa6133ce8900467ecb5b34fc217775ab) → [0x1e6ac429…](https://polygonscan.com/tx/0x1e6ac429f1772cd51f329e0b36749dc0a8d64dcf47ffe103d8780e2241abc690) → [b40c87fa…](https://explorer.selene.cash/tx/b40c87fa8775d21dbf4596c29bb2f7d58469107a676f98b996840e89fb78d51c) |
 <!-- swaps:end -->
 
 ![A mainnet USDC to PUSD swap: one signature, then each step on both chains with its transaction](docs/img/swap-usdc-to-pusd.jpg)
@@ -76,7 +80,7 @@ secret.
 ```mermaid
 sequenceDiagram
     participant U as Your browser (holds the secret)
-    participant E as ChirographHTLC (Base / Arbitrum)
+    participant E as ChirographHTLC (Base, Arbitrum, Optimism, Polygon)
     participant S as Solver
     participant B as ChirographLock (Bitcoin Cash)
     Note over U: USDC → PUSD
@@ -107,9 +111,10 @@ Because each input checks the output at its own index, many locks can settle in 
 ### EVM: `ChirographHTLC`
 
 [`contracts/evm/src/ChirographHTLC.sol`](contracts/evm/src/ChirographHTLC.sol) is deployed at the same
-address on [Base](https://basescan.org/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7) and
-[Arbitrum](https://arbiscan.io/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7), and the source is a
-full match on Sourcify. `lockWithAuthorization` pulls USDC with `receiveWithAuthorization`. The
+address on [Base](https://basescan.org/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7),
+[Arbitrum](https://arbiscan.io/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7),
+[Optimism](https://optimistic.etherscan.io/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7) and
+[Polygon](https://polygonscan.com/address/0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7), and the source is a full match on Sourcify on all four. `lockWithAuthorization` pulls USDC with `receiveWithAuthorization`. The
 authorization nonce *is* the lock id, so it commits to the recipient, amount, hash and timeout, and a
 relayer cannot change any of them. Claim and refund are permissionless and hash with `sha256`, the same
 function as Bitcoin Cash.
@@ -166,7 +171,7 @@ Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver.
   Base and Arbitrum, including smart-contract wallets and relayer tampering.
 - **SDK, 9 tests:** cross-chain hash vector, keyless claim lifecycle, junk-UTXO selection.
 - **End to end:** both directions through the real WizardConnect protocol on chipnet with a Base fork,
-  then twelve swaps on mainnet (PUSD and MUSD), re-checked by `pnpm verify:onchain`.
+  then fifteen swaps on mainnet (PUSD and MUSD), re-checked by `pnpm verify:onchain`.
 
 ## Honest limits
 

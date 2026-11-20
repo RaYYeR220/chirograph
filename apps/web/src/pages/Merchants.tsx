@@ -30,7 +30,7 @@ export function Merchants() {
     <Page>
       <div className="page-h">
         <h1>Take USDC.<br />Get PUSD.</h1>
-        <p>A Bitcoin Cash shop adds one script tag. The customer signs once with any USDC wallet on Base or Arbitrum; the shop's address receives PUSD on Bitcoin Cash. No account with us, no custody, nothing to redirect.</p>
+        <p>A Bitcoin Cash shop adds one script tag. The customer signs once with any USDC wallet on Base, Arbitrum, Optimism or Polygon; the shop's address receives PUSD on Bitcoin Cash. No account with us, no custody, nothing to redirect.</p>
       </div>
       <div className="app-grid">
         <div className="card card-pad">

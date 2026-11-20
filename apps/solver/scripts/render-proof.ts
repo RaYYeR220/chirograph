@@ -4,12 +4,15 @@
 //   pnpm render:proof
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { EVM_CHAINS } from '@chirograph/sdk';
+
+const name = (c: string) => EVM_CHAINS[c as 'base'].name;
 
 const root = (p: string) => fileURLToPath(new URL(`../../../${p}`, import.meta.url));
 const proof = JSON.parse(readFileSync(root('proof/mainnet.json'), 'utf8'));
 
 interface Swap {
-  id: string; direction: string; chain: 'base' | 'arbitrum'; openedAt: number;
+  id: string; direction: string; chain: 'base' | 'arbitrum' | 'optimism' | 'polygon'; openedAt: number;
   amountInCents: number; amountOutCents: number; feeCents: number;
   msToFundsInWallet: number | null; msToSettled: number | null;
   evm: { lockTx: string; claimTx: string }; bch: { lockTx: string; claimTx: string };
@@ -28,7 +31,7 @@ const timed = swaps.filter((s) => s.msToFundsInWallet !== null && s.msToSettled 
 const ins = timed.filter((s) => s.direction.startsWith('USDC->'));
 const outs = timed.filter((s) => s.direction.endsWith('->USDC'));
 const measured = {
-  source: `Median of ${timed.length} timed mainnet swaps on Base and Arbitrum, measured by the swapping wallet`,
+  source: `Median of ${timed.length} timed mainnet swaps on ${[...new Set(timed.map((s) => name(s.chain)))].join(', ')}, measured by the swapping wallet`,
   swaps: swaps.length,
   inSeconds: sec(median(ins.map((s) => s.msToFundsInWallet))),
   inBest: sec(Math.min(...ins.map((s) => s.msToFundsInWallet))),
@@ -40,10 +43,9 @@ const measured = {
 };
 writeFileSync(root('apps/web/src/lib/measured.json'), `${JSON.stringify(measured, null, 2)}\n`);
 
-const evmTx = (chain: string, h: string) => `[${h.slice(0, 10)}…](https://${chain === 'arbitrum' ? 'arbiscan.io' : 'basescan.org'}/tx/${h})`;
+const evmTx = (chain: string, h: string) => `[${h.slice(0, 10)}…](${EVM_CHAINS[chain as 'base'].explorer}/tx/${h})`;
 const bchTx = (h: string) => `[${h.slice(0, 8)}…](https://explorer.selene.cash/tx/${h})`;
 const usd = (c: number) => `$${(c / 100).toFixed(2)}`;
-const name = (c: string) => (c === 'arbitrum' ? 'Arbitrum' : 'Base');
 const when = (t: number) => new Date(t * 1000).toISOString().slice(0, 16).replace('T', ' ');
 
 const summary = [

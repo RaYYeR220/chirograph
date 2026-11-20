@@ -32,12 +32,12 @@ export function Landing() {
       <div className="grain" aria-hidden="true" />
       <Banner />
       <div className="top">
-        <canvas className="field" ref={cv} role="img" aria-label="A field split by a wavy seam drawn from the SHA-256 of a fresh 32-byte secret. Squares on the left are USDC on Base or Arbitrum, circles on the right are PUSD on Bitcoin Cash. A swap locks a ring on each side, one secret crosses the seam, and both rings open to their new owners. Every fourth swap the secret never arrives and both sides refund. Click to start a swap at that height." />
+        <canvas className="field" ref={cv} role="img" aria-label="A field split by a wavy seam drawn from the SHA-256 of a fresh 32-byte secret. Squares on the left are USDC on Base, Arbitrum, Optimism or Polygon, circles on the right are PUSD on Bitcoin Cash. A swap locks a ring on each side, one secret crosses the seam, and both rings open to their new owners. Every fourth swap the secret never arrives and both sides refund. Click to start a swap at that height." />
         <Nav />
         <section className="hero">
           <div className="panel rv d1" ref={panel}>
             <h1>One secret<br />opens both.</h1>
-            <p className="sub">USDC on Base or Arbitrum. PUSD or MUSD on Bitcoin Cash. Both sides lock to the same 32-byte secret, and only the secret crosses. If anything stalls, both sides refund themselves.</p>
+            <p className="sub">USDC on Base, Arbitrum, Optimism or Polygon. PUSD or MUSD on Bitcoin Cash. Both sides lock to the same 32-byte secret, and only the secret crosses. If anything stalls, both sides refund themselves.</p>
             <div className="ctas">
               <Link className="btn ink" href="/swap">Swap USDC ↔ PUSD</Link>
               <button className="btn ghost" ref={watch} type="button">Watch a swap</button>
@@ -98,7 +98,7 @@ export function Landing() {
         <div className="wrap">
           <div className="sec-h">
             <h2>Take USDC.<br />Get PUSD.</h2>
-            <p>One script tag on any Bitcoin Cash shop. Your customer signs once with any USDC wallet on Base or Arbitrum; PUSD (or MUSD) lands at your address seconds later.</p>
+            <p>One script tag on any Bitcoin Cash shop. Your customer signs once with any USDC wallet on Base, Arbitrum, Optimism or Polygon; PUSD (or MUSD) lands at your address seconds later.</p>
           </div>
           <div className="compare">
             <pre className="tile" style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: 13, overflowX: 'auto', whiteSpace: 'pre' }}>{snippet}</pre>
