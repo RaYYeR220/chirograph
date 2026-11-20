@@ -14,6 +14,15 @@ import type { BchSide } from './bch.js';
 import type { EvmSide } from './evm.js';
 
 export const THORNODE = process.env.THORNODE_URL ?? 'https://gateway.liquify.com/chain/thorchain_api';
+/**
+ * Extra THORNodes to cross-check vault addresses against (comma-separated base URLs). A quote is only
+ * acted on if every node lists the same vault and router for the source chain.
+ */
+const CHECK_NODES = [THORNODE, ...(process.env.THORNODE_CHECK_URLS ?? '').split(',').map((u) => u.trim()).filter(Boolean)];
+/** THORChain's router on Base. Pinned: a quote naming any other router is refused before any approval. */
+export const THOR_BASE_ROUTER = (process.env.THOR_BASE_ROUTER ?? '0x00dc6100103BC402d490aEE3F9a5560cBd91f1d4').toLowerCase();
+/** Short asset codes THORChain may use in memos. */
+const SHORT_CODES: Record<string, string> = { 'BCH.BCH': 'c' };
 export const THOR_ASSETS = {
   bch: 'BCH.BCH',
   baseUsdc: 'BASE.USDC-0X833589FCD6EDB6E08F4C7C32D4F71B54BDA02913',
@@ -35,8 +44,8 @@ export interface ThorQuote {
 
 export interface RouteStatus { chain: string; halted: boolean; tradingPaused: boolean }
 
-async function thor<T>(path: string): Promise<T> {
-  const res = await fetch(`${THORNODE}/thorchain/${path}`, { headers: { 'x-client-id': 'chirograph' } });
+async function thor<T>(path: string, node = THORNODE): Promise<T> {
+  const res = await fetch(`${node}/thorchain/${path}`, { headers: { 'x-client-id': 'chirograph' } });
   const body = await res.json() as T & { message?: string; error?: string };
   // A refused quote comes back as an object with a message and no inbound address.
   const refusedQuote = path.startsWith('quote') && !(body && typeof body === 'object' && 'inbound_address' in body);
@@ -84,7 +93,36 @@ export async function plan(direction: Direction, amountIn1e8: bigint, bch: BchSi
     throw new Error(`amount below THORChain's recommended minimum of ${q.recommended_min_amount_in} (1e8 units)`);
   }
   if (q.fees.total_bps > maxFeeBps) throw new Error(`fees ${q.fees.total_bps} bps exceed the cap of ${maxFeeBps} bps`);
+  await checkQuote(q, direction === 'bch-to-base' ? 'BCH' : 'BASE', to, destination, maxFeeBps);
   return { direction, amountIn1e8, quote: q, feeBps: q.fees.total_bps };
+}
+
+/**
+ * Never send to an address only one response vouched for. The vault (and on EVM the router) must match
+ * what every configured THORNode lists for the source chain, the router must be the pinned one, and the
+ * memo must swap into the asset we asked for, pay only our own address, and carry a price limit no
+ * looser than the fee cap.
+ */
+export async function checkQuote(q: ThorQuote, sourceChain: 'BCH' | 'BASE', toAsset: string, destination: string, maxFeeBps: number) {
+  const norm = (a: string) => a.trim().toLowerCase().replace(/^bitcoincash:/, '');
+  const lists = await Promise.all(CHECK_NODES.map((n) => thor<{ chain: string; address: string; router?: string }[]>('inbound_addresses', n)));
+  for (const [i, list] of lists.entries()) {
+    const entry = list.find((c) => c.chain === sourceChain);
+    if (!entry || norm(entry.address) !== norm(q.inbound_address)) throw new Error(`vault ${q.inbound_address} is not the ${sourceChain} vault listed by ${CHECK_NODES[i]}`);
+    if (sourceChain === 'BASE' && norm(entry.router ?? '') !== norm(q.router ?? '')) throw new Error(`router ${q.router} is not the one listed by ${CHECK_NODES[i]}`);
+  }
+  if (sourceChain === 'BASE' && norm(q.router ?? '') !== THOR_BASE_ROUTER) throw new Error(`router ${q.router} is not the pinned THORChain router ${THOR_BASE_ROUTER}`);
+
+  const [action, asset, dest, limitField] = q.memo.split(':');
+  if (!['=', 's', 'swap'].includes((action ?? '').toLowerCase())) throw new Error(`memo is not a swap: ${q.memo}`);
+  const assetOk = [toAsset, toAsset.split('-')[0], SHORT_CODES[toAsset]].filter(Boolean).map((a) => a!.toLowerCase()).includes((asset ?? '').toLowerCase());
+  if (!assetOk) throw new Error(`memo swaps into ${asset}, expected ${toAsset}`);
+  if (norm(dest ?? '') !== norm(destination)) throw new Error(`memo pays ${dest}, expected our own address ${destination}`);
+  const limitText = (limitField ?? '').split('/')[0] ?? '';
+  const m = /^(\d+)(?:e(\d+))?$/i.exec(limitText);
+  const limit = m ? BigInt(m[1]!) * 10n ** BigInt(m[2] ?? 0) : 0n;
+  const floor = (BigInt(q.expected_amount_out) * BigInt(10_000 - maxFeeBps)) / 10_000n;
+  if (limit === 0n || limit < floor) throw new Error(`memo price limit ${limitText || 'missing'} is below ${floor} (expected output less the fee cap)`);
 }
 
 /** Send the inbound transaction for a plan. Returns the inbound transaction id to track. */
