@@ -570,5 +570,38 @@
       }
     }
   ],
-  "musdCategory": "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366"
+  "musdCategory": "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",
+  "refunds": [
+    {
+      "id": "4dae745202584ab6b8f5e45cadb15942c825f8c17aade59caa34cf94326d1696",
+      "direction": "out",
+      "chain": "optimism",
+      "token": "PUSD",
+      "amountInCents": 29,
+      "openedAt": 1795205499,
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0xab3e81e814f0a65ee723c3d1f280797c9798b541eae3129ef9489b3ef8a8e103",
+        "lockTx": "0x1e84e7402b2a18f5575e06bb56cb6600f4030bb59a7a92aba8ecb67f984116b0",
+        "refundTx": "0xb9dd26241fd821c9bd2914fdc03e576ba29bedec60b5dd245c365f9a88f5f439"
+      },
+      "bch": {
+        "lockTx": "a2a400f4519c5b1abda32a81fa432f8bafbbbe830de560bdc6157b716dbbe95e",
+        "refundTx": "8696e1ac8498c19621ed0f58e256a5f2aa4e3dfcc99bc7729016ed286833c0f9",
+        "refundBytecode": "76a9144b44a74999538d471541037aa4bb231841cac34a88ac",
+        "tokenAmount": 29,
+        "tokenCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544"
+      },
+      "timeline": [
+        "Swap opened: PUSD -> USDC",
+        "Your PUSD is locked on Bitcoin Cash (0 conf)",
+        "No double-spend proof after the safety window; filling instantly",
+        "Solver locked USDC for you",
+        "Retrying after an error",
+        "Timed out: solver USDC lock refunded",
+        "Retrying after an error",
+        "Your PUSD was refunded to you"
+      ]
+    }
+  ]
 }

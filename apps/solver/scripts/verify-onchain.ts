@@ -26,7 +26,12 @@ interface ProofSwap {
   bch: { lockTx: string; claimTx: string; tokenAmount: number; tokenCategory?: string };
 }
 const proofPath = fileURLToPath(new URL('../../../proof/mainnet.json', import.meta.url));
-const proof = JSON.parse(readFileSync(proofPath, 'utf8')) as { pusdCategory: string; swaps: ProofSwap[] };
+interface ProofRefund {
+  id: string; chain: ProofSwap['chain']; amountInCents: number;
+  evm: { htlc: Address; lockId: Hex; lockTx: Hex; refundTx: Hex };
+  bch: { lockTx: string; refundTx: string; refundBytecode: string; tokenAmount: number; tokenCategory: string };
+}
+const proof = JSON.parse(readFileSync(proofPath, 'utf8')) as { pusdCategory: string; swaps: ProofSwap[]; refunds?: ProofRefund[] };
 
 // Public endpoints for each chain (an env override first, if set), tried in order.
 const VIEM = { base, arbitrum, optimism, polygon } as const;
@@ -116,5 +121,30 @@ if (proof.swaps.length >= 2) {
   if (pass) failed++;
 }
 
-console.log(failed ? `\n${failed} problem(s).` : `\nAll ${proof.swaps.length} swaps verified on-chain.`);
+// Refunds: a swap that stalled must have returned both sides, and its secret must never have appeared.
+for (const r of proof.refunds ?? []) {
+  const pub = clients[r.chain]!;
+  const receipt = await pub.getTransactionReceipt({ hash: r.evm.refundTx });
+  const refunded = receipt.status === 'success' && receipt.logs.some((l) => {
+    if (l.address.toLowerCase() !== r.evm.htlc.toLowerCase()) return false;
+    try {
+      const e = decodeEventLog({ abi: htlcAbi, data: l.data, topics: l.topics }) as { eventName: string; args: { id?: Hex } };
+      return e.eventName === 'Refunded' && e.args.id?.toLowerCase() === r.evm.lockId.toLowerCase();
+    } catch { return false; }
+  });
+  const lockTx = decodeTransaction(hexToBin(await electrum.getRawTransaction(r.bch.lockTx)));
+  const refundHex = await electrum.getRawTransaction(r.bch.refundTx);
+  const refundTx = decodeTransaction(hexToBin(refundHex));
+  if (typeof lockTx === 'string' || typeof refundTx === 'string') throw new Error('cannot decode BCH transaction');
+  const vout = lockTx.outputs.findIndex((o) => o.token && binToHex(o.token.category) === r.bch.tokenCategory && o.token.amount === BigInt(r.bch.tokenAmount));
+  const inputIdx = refundTx.inputs.findIndex((i) => binToHex(i.outpointTransactionHash) === r.bch.lockTx && i.outpointIndex === vout);
+  const out = inputIdx >= 0 ? refundTx.outputs[inputIdx] : undefined;
+  const backToUser = !!out && binToHex(out.lockingBytecode) === r.bch.refundBytecode && out.token?.amount === BigInt(r.bch.tokenAmount);
+  const noSecret = !extractSecret(refundHex, hexToBin(r.id));
+  const ok = refunded && vout >= 0 && backToUser && noSecret;
+  if (!ok) failed++;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  refund ${r.chain.padEnd(8)} $${(r.amountInCents / 100).toFixed(2)}: EVM lock refunded ${refunded ? 'yes' : 'NO'} · BCH lock back to its owner ${backToUser ? 'yes' : 'NO'} · secret never revealed ${noSecret ? 'yes' : 'NO'}`);
+}
+
+console.log(failed ? `\n${failed} problem(s).` : `\nAll ${proof.swaps.length} swaps${proof.refunds?.length ? ` and ${proof.refunds.length} refund(s)` : ''} verified on-chain.`);
 process.exit(failed ? 1 : 0);

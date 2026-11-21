@@ -67,6 +67,26 @@ lock, the solver's USDC lock, the relayed USDC claim to you, and the solver's ke
 includes a 4-second double-spend-proof window. In that window the solver waits before it trusts an
 unconfirmed Bitcoin Cash lock; see [docs/PROTOCOL.md](docs/PROTOCOL.md#fast-settlement-0-conf-with-double-spend-proofs).
 
+## A refund on mainnet
+
+One swap stalled by accident, and it shows the other half of the protocol. In a PUSD → USDC
+swap on Optimism (opened 2026-11-20 20:11 UTC), the solver locked the USDC, but the swapping wallet (the test script, which
+runs the same checks as the browser) read an RPC node that had not caught up yet. That node did not show
+the lock, so the wallet refused to reveal the secret. Nothing else happened, and nothing was needed:
+
+| Step | Transaction |
+|---|---|
+| The user's PUSD locked on Bitcoin Cash | [a2a400f4…](https://explorer.selene.cash/tx/a2a400f4519c5b1abda32a81fa432f8bafbbbe830de560bdc6157b716dbbe95e) |
+| The solver's USDC locked on Optimism | [0x1e84e740…](https://optimistic.etherscan.io/tx/0x1e84e7402b2a18f5575e06bb56cb6600f4030bb59a7a92aba8ecb67f984116b0) |
+| One hour later: the solver's USDC lock refunded to the solver | [0xb9dd2624…](https://optimistic.etherscan.io/tx/0xb9dd26241fd821c9bd2914fdc03e576ba29bedec60b5dd245c365f9a88f5f439) |
+| About five hours later (4 h plus the median-time-past lag): the PUSD refunded to the user, keylessly | [8696e1ac…](https://explorer.selene.cash/tx/8696e1ac8498c19621ed0f58e256a5f2aa4e3dfcc99bc7729016ed286833c0f9) |
+
+The secret never left the wallet, so neither side could take the other's funds. Each side got its own
+money back after its own timeout, in the order the protocol requires. `pnpm verify:onchain` checks this
+too: it confirms the `Refunded` event on Optimism, confirms that the Bitcoin Cash refund spends exactly
+that lock and pays its owner, and confirms that the secret appears nowhere. Browsers now wait for a
+lagging node to catch up before they decide.
+
 ## What `pnpm verify:onchain` checks
 
 For each swap it reads public nodes only (mainnet.base.org, arb1.arbitrum.io and a Fulcrum server):
