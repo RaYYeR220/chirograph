@@ -32,6 +32,10 @@ export class Engine {
   readonly events = new EventEmitter();
   private busy = new Set<string>();
   private inventory = { tokens: new Map<string, bigint>(), sats: 0n, usdc: new Map<EvmChainKey, bigint>(), at: 0 };
+  /** When each balance was last read successfully; a stale source offers no capacity. */
+  private freshAt = { bch: 0, usdc: new Map<EvmChainKey, number>() };
+  /** Per swap: the next EVM block to scan for a Claimed event. */
+  private scannedTo = new Map<string, bigint>();
   /** Capacity check and reservation happen under one lock, so concurrent opens cannot over-commit. */
   private openLock = new Mutex();
   /** 0-conf fill decisions run one at a time, so the exposure cap cannot be raced. */
@@ -56,7 +60,10 @@ export class Engine {
     const reserved = this.reserved();
     // Every USDC -> PUSD swap spends some of our BCH on its lock and fees; stop before we run dry.
     const satsBudget = this.inventory.sats - this.cfg.satsReserve - BigInt(reserved.inSwaps) * SATS_PER_IN_SWAP;
-    const bchOk = satsBudget >= SATS_PER_IN_SWAP;
+    // Never offer a swap on balances we could not read recently: the user would lock and then wait for a refund.
+    const STALE_MS = 30_000;
+    const bchFresh = Date.now() - this.freshAt.bch < STALE_MS;
+    const bchOk = bchFresh && satsBudget >= SATS_PER_IN_SWAP;
     const capacity: SolverInfo['capacity'] = {};
     const usdc: Record<string, number> = {};
     for (const key of this.evm.keys()) {
@@ -69,7 +76,8 @@ export class Engine {
       capacity[key] = {
         in: inBy.PUSD ?? 0,
         inBy,
-        out: this.inventory.sats >= this.cfg.satsReserve ? Math.max(0, Math.min(this.cfg.swapMax, bal - (reserved.usdc.get(key) ?? 0))) : 0,
+        out: bchFresh && Date.now() - (this.freshAt.usdc.get(key) ?? 0) < STALE_MS && this.inventory.sats >= this.cfg.satsReserve
+          ? Math.max(0, Math.min(this.cfg.swapMax, bal - (reserved.usdc.get(key) ?? 0))) : 0,
       };
     }
     return {
@@ -506,7 +514,7 @@ export class Engine {
         const lock = await side.readLock(swap.evm.lockId as Hex);
         if (lock.state === LockState.Claimed) {
           // The user (or anyone) claimed the USDC on-chain: the secret is public, collect the PUSD.
-          const secret = await this.claimedSecret(side, swap.evm.lockId as Hex, swap.createdAt);
+          const secret = await this.claimedSecret(side, swap);
           if (secret) {
             swap.secret = secret.slice(2);
             swap.status = 'secret_revealed';
@@ -592,22 +600,40 @@ export class Engine {
   // ---------------------------------------------------------------- helpers
 
   /**
-   * The secret from the Claimed event of an EVM lock, if it was claimed. Only the blocks since the
-   * swap opened are searched, newest first, in chunks small enough for public RPC log limits.
+   * The secret from the Claimed event of our EVM lock. A claim can only come after the lock, so the
+   * scan starts at the block that mined it and walks forward, remembering how far it got. Chunks
+   * shrink when a public RPC caps eth_getLogs ranges (some allow only 100-200 blocks).
    */
-  private async claimedSecret(side: EvmSide, id: Hex, since: number): Promise<Hex | undefined> {
-    const CHUNK = 5_000n;
+  private async claimedSecret(side: EvmSide, swap: SwapRecord): Promise<Hex | undefined> {
+    const id = swap.evm.lockId as Hex;
+    let from: bigint;
+    const resume = this.scannedTo.get(swap.id);
+    if (resume !== undefined) {
+      from = resume;
+    } else {
+      const receipt = swap.evm.lockTx
+        ? await side.pub.getTransactionReceipt({ hash: swap.evm.lockTx as Hex }).catch(() => undefined)
+        : undefined;
+      from = receipt?.blockNumber ?? side.deployBlock;
+    }
     const latest = await side.pub.getBlockNumber();
-    const back = BigInt(Math.ceil((now() - since + 900) / side.blockSeconds));
-    const floor = latest - back > side.deployBlock ? latest - back : side.deployBlock;
-    for (let to = latest; to >= floor; to -= CHUNK) {
-      const from = to - CHUNK + 1n > floor ? to - CHUNK + 1n : floor;
-      const logs = await side.pub.getContractEvents({
-        address: side.chain.htlc, abi: htlcAbi, eventName: 'Claimed', args: { id }, fromBlock: from, toBlock: to,
-      });
+    let chunk = 2_000n;
+    while (from <= latest) {
+      const to: bigint = from + chunk - 1n < latest ? from + chunk - 1n : latest;
+      let logs;
+      try {
+        logs = await side.pub.getContractEvents({
+          address: side.chain.htlc, abi: htlcAbi, eventName: 'Claimed', args: { id }, fromBlock: from, toBlock: to,
+        });
+      } catch (err) {
+        if (chunk > 50n) { chunk /= 2n; continue; }
+        this.scannedTo.set(swap.id, from);
+        throw err;
+      }
       const secret = (logs[0] as { args?: { secret?: Hex } } | undefined)?.args?.secret;
-      if (secret) return secret;
-      if (from === floor) break;
+      if (secret) { this.scannedTo.delete(swap.id); return secret; }
+      from = to + 1n;
+      this.scannedTo.set(swap.id, from);
     }
     return undefined;
   }
@@ -673,11 +699,12 @@ export class Engine {
       const inv = await this.bch.inventory();
       this.inventory.tokens = inv.tokens;
       this.inventory.sats = inv.sats;
+      this.freshAt.bch = Date.now();
     } catch (err) {
       console.error('inventory: bitcoin cash read failed', (err as Error).message);
     }
     await Promise.all([...this.evm].map(async ([key, side]) => {
-      try { this.inventory.usdc.set(key, await side.usdcBalance()); } catch (err) {
+      try { this.inventory.usdc.set(key, await side.usdcBalance()); this.freshAt.usdc.set(key, Date.now()); } catch (err) {
         console.error(`inventory: ${key} USDC read failed`, (err as Error).message);
       }
     }));

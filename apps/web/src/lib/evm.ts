@@ -41,6 +41,16 @@ export const wagmiConfig = createConfig({
   },
 });
 
+/** One client per RPC endpoint (no fallback), for reads we want confirmed by more than one provider. */
+export function singleClients(chainId: number): PublicClient[] {
+  const known = Object.values(EVM_CHAINS).find((c) => c.chainId === chainId && !/fork|sepolia/i.test(c.key));
+  const override = CONFIG.rpc[chainId];
+  const urls = (override ? [override] : [known?.rpc, ...(known?.rpcFallbacks ?? [])])
+    .filter((u): u is string => !!u).filter((u, i, a) => a.indexOf(u) === i);
+  const chain = CHAINS.find((c) => c.id === chainId) ?? base;
+  return urls.map((u) => createPublicClient({ chain, transport: http(u, { timeout: 10_000 }) }) as PublicClient);
+}
+
 const clients = new Map<number, PublicClient>();
 /** Read-only client per chain, independent of which wallet (if any) is connected. */
 export function publicClient(chainId: number): PublicClient {

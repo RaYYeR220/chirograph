@@ -13,8 +13,6 @@ const VIEM_CHAINS: Record<EvmChainKey, Chain> = {
   baseFork: base, arbitrumFork: arbitrum,
 };
 
-const BLOCK_SECONDS: Record<number, number> = { 8453: 2, 42161: 0.25, 10: 2, 137: 2 };
-
 export interface OnchainLock {
   sender: Address; recipient: Address; amount: bigint; secretHash: Hex; refundTime: bigint; state: LockState;
 }
@@ -40,8 +38,6 @@ export class EvmSide {
 
   /** First block to scan for escrow events (set HTLC_DEPLOY_BLOCK per chain to keep log queries cheap). */
   get deployBlock(): bigint { return BigInt(this.chain.deployBlock ?? 0); }
-  /** Typical seconds per block, used to turn a time window into a block range. */
-  get blockSeconds(): number { return BLOCK_SECONDS[this.chain.chainId] ?? 2; }
 
   /** 'success' / 'reverted' once mined, 'pending' while the node knows it, 'unknown' if it was dropped. */
   async receiptStatus(hash: Hex): Promise<'success' | 'reverted' | 'pending' | 'unknown'> {

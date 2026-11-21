@@ -53,6 +53,8 @@ export function Swap({ id }: { id?: string }) {
   const cents = Math.round(Number(amount) * 100);
   const fee = Math.max(FEE.minCents, Math.ceil((cents * FEE.bps) / 10_000));
   const offered = (info?.tokens?.map((t) => t.symbol) ?? ['PUSD']) as StableSymbol[];
+  // A token the solver stopped offering (e.g. from an old swap link) falls back to PUSD.
+  useEffect(() => { if (info && !offered.includes(token)) setToken('PUSD'); }, [info, offered.join(), token]); // eslint-disable-line react-hooks/exhaustive-deps
   const capRow = info?.capacity[activeChain];
   const cap = direction === 'in' ? capRow?.inBy?.[token] ?? (token === 'PUSD' ? capRow?.in ?? 0 : 0) : capRow?.out ?? 0;
   const held = bch.wallet ? bch.wallet.tokensBy[TRUST.tokens[token]] ?? 0n : 0n;

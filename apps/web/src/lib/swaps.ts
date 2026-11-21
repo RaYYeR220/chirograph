@@ -10,7 +10,7 @@ import {
 import { CONFIG, TRUST } from './config';
 import { chainName } from './chains';
 import { bchProvider, scanWallet, signAndBroadcast, waitForUtxo, type WalletSnapshot } from './bchWallet';
-import { publicClient } from './evm';
+import { publicClient, singleClients } from './evm';
 
 export const solver = new SolverClient(CONFIG.solverUrl);
 const now = () => Math.floor(Date.now() / 1000);
@@ -295,9 +295,20 @@ export async function checkSolverEvmLock(
   const local = storedSwap(swap.id);
   if (!local || local.direction !== 'out') throw new Error('this browser does not hold this swap');
   const chain = trustedChain(info, local.chain);
-  const read = () => publicClient(chain.chainId).readContract({
-    address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
-  });
+  // Ask two independent RPC providers when there are two, and refuse to reveal if they disagree:
+  // one dishonest or broken provider must not be able to talk this browser into revealing.
+  const providers = singleClients(chain.chainId).slice(0, 2);
+  const read = async () => {
+    const answers = (await Promise.allSettled(providers.map((c) => c.readContract({
+      address: chain.htlc, abi: htlcAbi, functionName: 'locks', args: [swap.evm.lockId as Hex],
+    })))).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    if (!answers.length) throw new Error('no RPC provider answered; try again in a moment');
+    const key = (a: (typeof answers)[number]) => a.map(String).join('|').toLowerCase();
+    // A provider that is a block behind shows no lock yet; wait for it rather than call that a disagreement.
+    if (answers.some((a) => a[5] === LockState.None)) return answers.find((a) => a[5] === LockState.None)!;
+    if (answers.some((a) => key(a) !== key(answers[0]!))) throw new Error('RPC providers disagree about the solver lock; not revealing');
+    return answers[0]!;
+  };
   // An RPC node a block behind the solver's may not show the lock yet. Only "not there yet" is
   // retried; anything else that doesn't match stops the swap right away.
   let lock = await read();
