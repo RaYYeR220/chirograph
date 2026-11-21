@@ -188,9 +188,11 @@ Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver, a
   double-spend-proof check, so a solver that raced a double-spend could take up to that amount. Above
   $5, or when the server can't answer about proofs, the browser waits for one confirmation. The caps
   and the proof windows limit the risk; they don't remove it.
-- **Rebalancing goes through THORChain, and it was halted.** [`scripts/rebalance.ts`](apps/solver/scripts/rebalance.ts)
+- **Rebalancing between EVM chains uses Circle CCTP; BCH ↔ EVM goes through THORChain, which was halted.**
+  [`scripts/rebalance-usdc.ts`](apps/solver/scripts/rebalance-usdc.ts) burns USDC on one chain and mints it on
+  another (fast transfer, seconds; see [PROOF.md](PROOF.md#setup-transactions)). [`scripts/rebalance.ts`](apps/solver/scripts/rebalance.ts)
   moves inventory between BCH and Base through THORChain's vaults and router. It checks THORChain's halt
-  flags and a fee cap before it sends anything. On 20 November THORChain had Base halted, so no
+  flags and a fee cap before it sends anything. On 20 November THORChain had Base halted, so no THORChain
   rebalance has run yet.
 
 The full list is in [docs/PROTOCOL.md](docs/PROTOCOL.md#honest-limits).

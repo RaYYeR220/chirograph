@@ -111,6 +111,8 @@ These moved money into place before the swaps above. None of them is part of a s
 | Solver swaps 0.0009 ETH for 1.56 USDC on Base (Uniswap) | [0x82a00169…](https://basescan.org/tx/0x82a00169c0cd1dd85187a91fcca56221bc72e858ca7d215f2c75df2b699a7cc1) |
 | Solver swaps 0.0002 ETH for 0.35 USDC on Arbitrum (Uniswap) | [0x5c1955e4…](https://arbiscan.io/tx/0x5c1955e426db368b7a5abcabeea92b7cdf6443f742e629af06f0cbf7750a5ba4) |
 | Test wallet receives 0.60 USDC on Base | [0x16ea789d…](https://basescan.org/tx/0x16ea789d202f5127da3b83b03675fadc237cbac616d4474bdc6eb5b029c73869) |
+| Solver moves 0.30 USDC Base → Optimism with Circle CCTP V2: burn, then mint 6 s later | [0x7197e622…](https://basescan.org/tx/0x7197e62216cfe56f4528a53bd183776d31dd669a1fd7657557cd93650c5c9230) → [0x87f7e7f5…](https://optimistic.etherscan.io/tx/0x87f7e7f5fdc2db33bcf521fa2d091b83d0c322e9a71ff56422bf635e4b3de880) |
+| Solver moves 0.30 USDC Base → Polygon with Circle CCTP V2: burn, then mint 3 s later | [0x337fa2be…](https://basescan.org/tx/0x337fa2bea3f1b7b8c65ab73f12a825b742fbdebc81b31cfe1bbf9ff6dcbc0651) → [0x0bda8dd6…](https://polygonscan.com/tx/0x0bda8dd6f7009c7d4530d4ed7db31675c589f3bbf37eb265669a70f793d2f665) |
 | Test wallet receives 25,000 sats for lock fees | [47d021f7…](https://explorer.selene.cash/tx/47d021f79b4a3792de19bd0ce55197187923ebf32566f53fca634e527bc276c2) |
 
 Thirteen swaps were driven by a script that acts exactly like the browser does. It uses the same SDK

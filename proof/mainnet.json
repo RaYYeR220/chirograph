@@ -70,6 +70,26 @@
       "what": "test wallet receives 15,000 sats for lock fees",
       "chain": "bch",
       "tx": "a6da42906f2aa89885f76219365b1e36d3b4b0b67620db80bbde26093dbf87af"
+    },
+    {
+      "what": "solver moves 0.30 USDC Base \u2192 Optimism with Circle CCTP V2 (burn)",
+      "chain": "base",
+      "tx": "0x7197e62216cfe56f4528a53bd183776d31dd669a1fd7657557cd93650c5c9230"
+    },
+    {
+      "what": "\u2026 minted on Optimism",
+      "chain": "optimism",
+      "tx": "0x87f7e7f5fdc2db33bcf521fa2d091b83d0c322e9a71ff56422bf635e4b3de880"
+    },
+    {
+      "what": "solver moves 0.30 USDC Base \u2192 Polygon with Circle CCTP V2 (burn)",
+      "chain": "base",
+      "tx": "0x337fa2bea3f1b7b8c65ab73f12a825b742fbdebc81b31cfe1bbf9ff6dcbc0651"
+    },
+    {
+      "what": "\u2026 minted on Polygon",
+      "chain": "polygon",
+      "tx": "0x0bda8dd6f7009c7d4530d4ed7db31675c589f3bbf37eb265669a70f793d2f665"
     }
   ],
   "swaps": [
