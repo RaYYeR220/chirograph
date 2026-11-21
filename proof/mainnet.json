@@ -588,6 +588,37 @@
         "tokenAmount": 25,
         "tokenCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544"
       }
+    },
+    {
+      "id": "2f9b6c53fc901e6899f874c5170ed9c867c48900415d035474333ecfb43ba748",
+      "direction": "PUSD->USDC",
+      "token": "PUSD",
+      "chain": "base",
+      "tier": "instant",
+      "amountInCents": 25,
+      "amountOutCents": 24,
+      "feeCents": 1,
+      "openedAt": 1795225211,
+      "secretHash": "2f9b6c53fc901e6899f874c5170ed9c867c48900415d035474333ecfb43ba748",
+      "signaturesByUser": 1,
+      "msToFundsInWallet": 8113,
+      "msToSettled": 9814,
+      "timedBy": "script",
+      "evm": {
+        "htlc": "0xF8CD07455A4AC40e1653cF2c7543c81f768FD5E7",
+        "lockId": "0xca7a4d138ede637c709dcb23f8d640b33be176001325d754d13f43fdd06a6f72",
+        "lockTx": "0x76cc0b2a4ccc53d57e2bce2bb0581b6a70cf20f01d43d33a7a497a8502149707",
+        "claimTx": "0x3aa0b67b27cb005e5c0529441a5d8359d382828b5dd339776d21d8d4675ab3ae",
+        "sender": "0x2eEa4EFaD1Ff5373b40E85EfbA9Cd40021793a17",
+        "recipient": "0xb08f182ffF3C238C4645BE987684E120d962725e"
+      },
+      "bch": {
+        "lockAddress": "bitcoincash:rvzxcm42sa00y55hhlphla7zwr45g8z08e8nz27fmkrsjxdsngdmclmm7lejz",
+        "lockTx": "39498fef8c30343362a8498c428beccec2083fb3126115fecc209cd9578e3d01",
+        "claimTx": "de86960d64f9c61ba65fdf1c9c3176f6a2b69c2da6508d1ab247fca07a251b8b",
+        "tokenAmount": 25,
+        "tokenCategory": "2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544"
+      }
     }
   ],
   "musdCategory": "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",

@@ -1,11 +1,11 @@
 {
-  "source": "Median of 13 timed mainnet swaps on Base, Arbitrum, Optimism, Polygon, measured by the swapping wallet",
-  "swaps": 16,
+  "source": "Median of 14 timed mainnet swaps on Base, Arbitrum, Optimism, Polygon, measured by the swapping wallet",
+  "swaps": 17,
   "inSeconds": 4.3,
   "inBest": 2.3,
   "inSettled": 6.7,
-  "outSeconds": 9,
-  "outBest": 8.2,
-  "outSettled": 12.6,
-  "volumeCents": 547
+  "outSeconds": 8.8,
+  "outBest": 8.1,
+  "outSettled": 12.2,
+  "volumeCents": 572
 }

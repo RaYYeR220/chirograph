@@ -25,7 +25,7 @@ what lets the other side collect theirs. If anything stalls, both sides refund t
 | Direction | Median time to funds | Best | Fully settled (median) | Signatures | Fee |
 |---|---|---|---|---|---|
 | USDC → PUSD/MUSD | **4.3 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
-| PUSD/MUSD → USDC | **9.0 s** | 8.2 s | 12.6 s | 1 | 0.3%, min 1¢ |
+| PUSD/MUSD → USDC | **8.8 s** | 8.1 s | 12.2 s | 1 | 0.3%, min 1¢ |
 <!-- summary:end -->
 
 Every number above comes from `proof/mainnet.json` through `pnpm render:proof`. Nothing is typed by
@@ -63,6 +63,7 @@ secret.
 | 14 | 2026-11-20 20:08 | USDC → PUSD | Polygon | $0.30 → $0.29 | 5.1 s | 7.8 s | [0x55fe737d…](https://polygonscan.com/tx/0x55fe737de75f176cbe6bba843743308d3cee700746627590e109feda39d40d59) → [d97f3a91…](https://explorer.selene.cash/tx/d97f3a9182e374456184e79196d4de5b1267a0cf363bf4c32871080dce5ff75b) → [881125e4…](https://explorer.selene.cash/tx/881125e47900449d157928f9774b7718f23e315719d3a32ad84a9d9754f2126a) → [0xb1268f75…](https://polygonscan.com/tx/0xb1268f7557459b975225c110b5feea4b49fe7504db806a71a904707969bd7851) |
 | 15 | 2026-11-20 20:12 | PUSD → USDC | Polygon | $0.29 → $0.28 | 10.7 s | 14.6 s | [41f24a31…](https://explorer.selene.cash/tx/41f24a31009987511ad94b25581568bd76bc64ebb63c2bd174760d94d41697ca) → [0xb239255c…](https://polygonscan.com/tx/0xb239255cbb40b4ef40f582c33a3c1f71fa6133ce8900467ecb5b34fc217775ab) → [0x1e6ac429…](https://polygonscan.com/tx/0x1e6ac429f1772cd51f329e0b36749dc0a8d64dcf47ffe103d8780e2241abc690) → [b40c87fa…](https://explorer.selene.cash/tx/b40c87fa8775d21dbf4596c29bb2f7d58469107a676f98b996840e89fb78d51c) |
 | 16 | 2026-11-20 21:12 | PUSD → USDC | Optimism | $0.25 → $0.24 | 8.8 s | 12.2 s | [16ac7c7f…](https://explorer.selene.cash/tx/16ac7c7f9f58fb68402b4263fb71cd989f5700c3ec42d70a37babc8282644576) → [0x6346ca54…](https://optimistic.etherscan.io/tx/0x6346ca54a89289a93f24f5e5fb7c5a123788dc1c3c8f55526770743542d0c26e) → [0x6a20889e…](https://optimistic.etherscan.io/tx/0x6a20889e2970b170fe023ab191d22818d08beb74abc8df1d7f3fde693f3efcc5) → [7c443231…](https://explorer.selene.cash/tx/7c443231e8783d3b225bbb922df13f779b7480304c3bdf61533e8c7c655d5289) |
+| 17 | 2026-11-21 01:40 | PUSD → USDC | Base | $0.25 → $0.24 | 8.1 s | 9.8 s | [39498fef…](https://explorer.selene.cash/tx/39498fef8c30343362a8498c428beccec2083fb3126115fecc209cd9578e3d01) → [0x76cc0b2a…](https://basescan.org/tx/0x76cc0b2a4ccc53d57e2bce2bb0581b6a70cf20f01d43d33a7a497a8502149707) → [0x3aa0b67b…](https://basescan.org/tx/0x3aa0b67b27cb005e5c0529441a5d8359d382828b5dd339776d21d8d4675ab3ae) → [de86960d…](https://explorer.selene.cash/tx/de86960d64f9c61ba65fdf1c9c3176f6a2b69c2da6508d1ab247fca07a251b8b) |
 <!-- swaps:end -->
 
 ![A mainnet USDC to PUSD swap: one signature, then each step on both chains with its transaction](docs/img/swap-usdc-to-pusd.jpg)
@@ -173,7 +174,7 @@ Web: `pnpm --filter @chirograph/web dev`. Point `VITE_SOLVER_URL` at a solver, a
   Base and Arbitrum, including smart-contract wallets and relayer tampering.
 - **SDK, 9 tests:** cross-chain hash vector, keyless claim lifecycle, junk-UTXO selection.
 - **End to end:** both directions through the real WizardConnect protocol on chipnet with a Base fork,
-  then sixteen swaps on mainnet (PUSD and MUSD), re-checked by `pnpm verify:onchain`.
+  then seventeen swaps on mainnet (PUSD and MUSD), re-checked by `pnpm verify:onchain`.
 
 ## Honest limits
 

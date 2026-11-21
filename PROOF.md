@@ -32,7 +32,7 @@ swap's parameters. The lock and claim transactions in the table below are those 
 | Direction | Median time to funds | Best | Fully settled (median) | Signatures | Fee |
 |---|---|---|---|---|---|
 | USDC → PUSD/MUSD | **4.3 s** | 2.3 s | 6.7 s | 1 | 0.3%, min 1¢ |
-| PUSD/MUSD → USDC | **9.0 s** | 8.2 s | 12.6 s | 1 | 0.3%, min 1¢ |
+| PUSD/MUSD → USDC | **8.8 s** | 8.1 s | 12.2 s | 1 | 0.3%, min 1¢ |
 <!-- summary:end -->
 
 ## Every swap
@@ -60,6 +60,7 @@ lock, the solver's USDC lock, the relayed USDC claim to you, and the solver's ke
 | 14 | 2026-11-20 20:08 | USDC → PUSD | Polygon | $0.30 → $0.29 | 5.1 s | 7.8 s | [0x55fe737d…](https://polygonscan.com/tx/0x55fe737de75f176cbe6bba843743308d3cee700746627590e109feda39d40d59) → [d97f3a91…](https://explorer.selene.cash/tx/d97f3a9182e374456184e79196d4de5b1267a0cf363bf4c32871080dce5ff75b) → [881125e4…](https://explorer.selene.cash/tx/881125e47900449d157928f9774b7718f23e315719d3a32ad84a9d9754f2126a) → [0xb1268f75…](https://polygonscan.com/tx/0xb1268f7557459b975225c110b5feea4b49fe7504db806a71a904707969bd7851) |
 | 15 | 2026-11-20 20:12 | PUSD → USDC | Polygon | $0.29 → $0.28 | 10.7 s | 14.6 s | [41f24a31…](https://explorer.selene.cash/tx/41f24a31009987511ad94b25581568bd76bc64ebb63c2bd174760d94d41697ca) → [0xb239255c…](https://polygonscan.com/tx/0xb239255cbb40b4ef40f582c33a3c1f71fa6133ce8900467ecb5b34fc217775ab) → [0x1e6ac429…](https://polygonscan.com/tx/0x1e6ac429f1772cd51f329e0b36749dc0a8d64dcf47ffe103d8780e2241abc690) → [b40c87fa…](https://explorer.selene.cash/tx/b40c87fa8775d21dbf4596c29bb2f7d58469107a676f98b996840e89fb78d51c) |
 | 16 | 2026-11-20 21:12 | PUSD → USDC | Optimism | $0.25 → $0.24 | 8.8 s | 12.2 s | [16ac7c7f…](https://explorer.selene.cash/tx/16ac7c7f9f58fb68402b4263fb71cd989f5700c3ec42d70a37babc8282644576) → [0x6346ca54…](https://optimistic.etherscan.io/tx/0x6346ca54a89289a93f24f5e5fb7c5a123788dc1c3c8f55526770743542d0c26e) → [0x6a20889e…](https://optimistic.etherscan.io/tx/0x6a20889e2970b170fe023ab191d22818d08beb74abc8df1d7f3fde693f3efcc5) → [7c443231…](https://explorer.selene.cash/tx/7c443231e8783d3b225bbb922df13f779b7480304c3bdf61533e8c7c655d5289) |
+| 17 | 2026-11-21 01:40 | PUSD → USDC | Base | $0.25 → $0.24 | 8.1 s | 9.8 s | [39498fef…](https://explorer.selene.cash/tx/39498fef8c30343362a8498c428beccec2083fb3126115fecc209cd9578e3d01) → [0x76cc0b2a…](https://basescan.org/tx/0x76cc0b2a4ccc53d57e2bce2bb0581b6a70cf20f01d43d33a7a497a8502149707) → [0x3aa0b67b…](https://basescan.org/tx/0x3aa0b67b27cb005e5c0529441a5d8359d382828b5dd339776d21d8d4675ab3ae) → [de86960d…](https://explorer.selene.cash/tx/de86960d64f9c61ba65fdf1c9c3176f6a2b69c2da6508d1ab247fca07a251b8b) |
 <!-- swaps:end -->
 
 "To funds" means from the user's signature until the money is spendable in the user's wallet.
@@ -115,7 +116,7 @@ These moved money into place before the swaps above. None of them is part of a s
 | Solver moves 0.30 USDC Base → Polygon with Circle CCTP V2: burn, then mint 3 s later | [0x337fa2be…](https://basescan.org/tx/0x337fa2bea3f1b7b8c65ab73f12a825b742fbdebc81b31cfe1bbf9ff6dcbc0651) → [0x0bda8dd6…](https://polygonscan.com/tx/0x0bda8dd6f7009c7d4530d4ed7db31675c589f3bbf37eb265669a70f793d2f665) |
 | Test wallet receives 25,000 sats for lock fees | [47d021f7…](https://explorer.selene.cash/tx/47d021f79b4a3792de19bd0ce55197187923ebf32566f53fca634e527bc276c2) |
 
-Thirteen swaps were driven by a script that acts exactly like the browser does. It uses the same SDK
+Fourteen swaps were driven by a script that acts exactly like the browser does. It uses the same SDK
 calls, the same on-chain checks before revealing, and the same keyless claim. Swaps 7 to 9 were made in
 the live app while filming the demo video, with a WizardConnect wallet, so they carry no script timing. The same flows were also
 run in the real app through a WizardConnect wallet, on chipnet with a Base fork. Swaps made from the live

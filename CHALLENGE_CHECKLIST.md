@@ -4,7 +4,7 @@
 
 | Requirement | Where |
 |---|---|
-| Runs on Bitcoin Cash mainnet | Sixteen mainnet swaps in [PROOF.md](PROOF.md); live at https://chirograph-cash.vercel.app |
+| Runs on Bitcoin Cash mainnet | Seventeen mainnet swaps in [PROOF.md](PROOF.md); live at https://chirograph-cash.vercel.app |
 | Judges can make a useful BCH mainnet transaction from the live site | Both swap directions: a PUSD lock signed in your wallet, or a keyless PUSD claim broadcast by your browser ([JUDGES.md](JUDGES.md#3-make-one-yourself-2-min-from-025)) |
 | Live, clickable demo | https://chirograph-cash.vercel.app/swap |
 | WizardConnect integration | [`apps/web/src/lib/hooks.ts`](apps/web/src/lib/hooks.ts) (`useBch`), [`Wallets.tsx`](apps/web/src/components/Wallets.tsx), [`bchWallet.ts`](apps/web/src/lib/bchWallet.ts) |
