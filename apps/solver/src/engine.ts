@@ -600,22 +600,21 @@ export class Engine {
   // ---------------------------------------------------------------- helpers
 
   /**
-   * The secret from the Claimed event of our EVM lock. A claim can only come after the lock, so the
-   * scan starts at the block that mined it and walks forward, remembering how far it got. Chunks
-   * shrink when a public RPC caps eth_getLogs ranges (some allow only 100-200 blocks).
+   * The secret from the Claimed event of our EVM lock (only called once the lock reads as claimed).
+   * A claim can only come after the lock, so the scan starts at the block that mined it and walks
+   * forward. Chunks shrink when a public RPC caps eth_getLogs ranges (some allow only 100-200 blocks).
+   * A node that lags can return empty logs for recent blocks, so a scan that finds nothing starts
+   * over from the lock next time, and a scan cut short by an error resumes well behind where it stopped.
    */
   private async claimedSecret(side: EvmSide, swap: SwapRecord): Promise<Hex | undefined> {
     const id = swap.evm.lockId as Hex;
-    let from: bigint;
+    const SAFETY = 256n;
+    const receipt = swap.evm.lockTx
+      ? await side.pub.getTransactionReceipt({ hash: swap.evm.lockTx as Hex }).catch(() => undefined)
+      : undefined;
+    const lockBlock = receipt?.blockNumber ?? side.deployBlock;
     const resume = this.scannedTo.get(swap.id);
-    if (resume !== undefined) {
-      from = resume;
-    } else {
-      const receipt = swap.evm.lockTx
-        ? await side.pub.getTransactionReceipt({ hash: swap.evm.lockTx as Hex }).catch(() => undefined)
-        : undefined;
-      from = receipt?.blockNumber ?? side.deployBlock;
-    }
+    let from: bigint = resume !== undefined && resume > lockBlock ? resume : lockBlock;
     const latest = await side.pub.getBlockNumber();
     let chunk = 2_000n;
     while (from <= latest) {
@@ -627,14 +626,14 @@ export class Engine {
         });
       } catch (err) {
         if (chunk > 50n) { chunk /= 2n; continue; }
-        this.scannedTo.set(swap.id, from);
+        this.scannedTo.set(swap.id, from - SAFETY > lockBlock ? from - SAFETY : lockBlock);
         throw err;
       }
       const secret = (logs[0] as { args?: { secret?: Hex } } | undefined)?.args?.secret;
       if (secret) { this.scannedTo.delete(swap.id); return secret; }
       from = to + 1n;
-      this.scannedTo.set(swap.id, from);
     }
+    this.scannedTo.delete(swap.id);
     return undefined;
   }
 
